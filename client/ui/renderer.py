@@ -1,11 +1,5 @@
 """Plain text CLI renderer for Blackjack."""
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich import box
-
 from shared.models import (
     Card,
     HandResult,
@@ -14,8 +8,6 @@ from shared.models import (
     best_total,
     snapshot_from_dict,
 )
-
-console = Console(highlight=False)
 
 
 def render_card(card: Card) -> list[str]:
@@ -55,6 +47,18 @@ def render_hand(cards: list[Card], hidden: bool = False) -> str:
         line_parts = [cr[row] for cr in card_renders]
         lines.append(" ".join(line_parts))
     return "\n".join(lines)
+
+
+def _box(lines: list[str], width: int = 48) -> str:
+    """Wrap lines in a single-line box."""
+    top = "┌" + "─" * width + "┐"
+    bot = "└" + "─" * width + "┘"
+    result = [top]
+    for line in lines:
+        padded = line.ljust(width)[:width]
+        result.append(f"│{padded}│")
+    result.append(bot)
+    return "\n".join(result)
 
 
 def render_snapshot(snap_dict: dict, bankroll: int = 0) -> None:
@@ -139,42 +143,65 @@ def render_result(hand_result: dict) -> None:
     print(f"  >> {desc} ({net_str})")
 
 
-def render_session_summary(summary: dict) -> None:
-    print()
-    print("  ================================")
-    print("         SESSION SUMMARY")
-    print("  ================================")
-
-    starting = summary["starting_bankroll"]
-    final = summary["final_bankroll"]
-    net = summary["net_winnings"]
-    net_str = f"+${net}" if net >= 0 else f"-${abs(net)}"
-
-    print(f"  Starting Bankroll:  ${starting}")
-    print(f"  Final Bankroll:     ${final}")
-    print(f"  Net:                {net_str}")
-    print()
-    print(f"  Hands Played:       {summary['hands_played']}")
-    print(f"  Wins:               {summary['hands_won']}")
-    print(f"  Losses:             {summary['hands_lost']}")
-    print(f"  Pushes:             {summary['hands_pushed']}")
-    print(f"  Blackjacks:         {summary['blackjacks']}")
-    print(f"  Total Wagered:      ${summary['total_wagered']}")
-    print("  ================================")
-    print()
+def render_stats_bar(state: dict) -> None:
+    """Show running stats between hands."""
+    played = state["hands_played"]
+    if played > 0:
+        print(f"  Hands played: {played}")
+        print("  ─────────────────────────────────────────")
 
 
-def render_welcome(bankroll: int) -> None:
+def render_session_summary(summary: dict, player_name: str, session_id: str) -> None:
     print()
-    print("  ================================")
-    print("      ♠ ♥  BLACKJACK  ♦ ♣")
-    print("  ================================")
-    print("  6-deck shoe")
-    print("  Dealer stands on 17")
-    print("  Blackjack pays 3:2")
-    print(f"  Starting bankroll: ${bankroll}")
-    print(f"  Min bet: $10")
-    print("  ================================")
+    lines = [
+        "",
+        "        SESSION SUMMARY",
+        "",
+        f"  Player: {player_name}",
+        f"  Final bankroll: ${summary['final_bankroll']}",
+        f"  Hands played: {summary['hands_played']}",
+        f"  Won: {summary['hands_won']}  |  Lost: {summary['hands_lost']}  |  Pushed: {summary['hands_pushed']}",
+        f"  Biggest win: ${summary['biggest_win']}",
+        f"  Bankroll high: ${summary['bankroll_high']}",
+        "",
+        f"  Thanks for playing, {player_name}!",
+        f"  Session ID: {session_id}",
+        f"  View in Temporal UI: http://localhost:8080",
+    ]
+    print(_box(lines, 48))
+    print()
+
+
+def render_welcome() -> None:
+    print()
+    title_lines = [
+        "",
+        "    ♠ ♥ ♦ ♣  BLACKJACK CASINO  ♣ ♦ ♥ ♠",
+        "",
+        "  Powered by Temporal Workflows",
+        "  Each hand is a child workflow!",
+    ]
+    print(_box(title_lines, 48))
+    print()
+
+    shoe = (
+        "              ┌────────────────────────────────┐\n"
+        "             /│ ┌──┐ ┌──┐ ┌──┐ ┌──┐ ┌──┐ ┌──┐  │\n"
+        "            / │ │♠ │ │♥ │ │♦ │ │♣ │ │♠ │ │♥ │  │\n"
+        "           /  │ └──┘ └──┘ └──┘ └──┘ └──┘ └──┘  │\n"
+        "          /   │      312 cards · 6 decks       │\n"
+        "         /    ├────────────────────────────────┤\n"
+        "        /     │    ← cards dealt out here      │\n"
+        "       /──────┴────────────────────────────────┘"
+    )
+    print(shoe)
+    print()
+
+    print('  The "shoe" is a dealing device used in')
+    print("  casinos. It holds 6 shuffled decks (312")
+    print("  cards) to make card counting harder.")
+    print("  Cards slide out one at a time from the")
+    print("  front slot as the dealer draws them.")
     print()
 
 

@@ -6,9 +6,10 @@ from shared.models import Action
 def prompt_bet(bankroll: int, min_bet: int) -> int | None:
     """Ask player for bet amount. Returns None if they want to cash out."""
     print(f"  Bankroll: ${bankroll} | Min bet: ${min_bet}")
-    response = input(f"  Place your bet (or 'q' to cash out) [{min_bet}]: ").strip()
+    response = input(f"  Place your bet (or 'quit' to cash out): ").strip()
     if not response:
-        response = str(min_bet)
+        print("  Enter a number or 'quit'")
+        return prompt_bet(bankroll, min_bet)
     if response.lower() in ("q", "quit", "exit", "cash out"):
         return None
     try:

@@ -36,11 +36,14 @@ class BlackjackSessionWorkflow:
         self.blackjacks: int = 0
         self.total_wagered: int = 0
         self.net_winnings: int = 0
+        self.biggest_win: int = 0
+        self.bankroll_high: int = STARTING_BANKROLL
         self.active_hand_workflow_id: str | None = None
         self.waiting_for_bet: bool = True
         self.session_over: bool = False
         self.pending_bet: int | None = None
         self.cash_out_requested: bool = False
+        self.last_hand_result: dict | None = None
 
     def _draw(self) -> Card:
         return self.shoe.pop(0)
@@ -80,6 +83,10 @@ class BlackjackSessionWorkflow:
         self.total_wagered += amount
         self.pending_bet = amount
         return {"ok": True, "error": None, "hand_workflow_id": "pending"}
+
+    @workflow.query
+    def get_last_hand_result(self) -> dict | None:
+        return self.last_hand_result
 
     @workflow.query
     def get_session_state(self) -> dict:
@@ -148,11 +155,19 @@ class BlackjackSessionWorkflow:
             # Update shoe from child's remaining cards
             self.shoe = [card_from_dict(c) for c in result["remaining_shoe"]]
 
+            # Store result for client to query
+            self.last_hand_result = result
+
             # Process result
             net_payout = result["net_payout"]
             self.bankroll += bet + net_payout  # return bet + net
             self.net_winnings += net_payout
             self.hands_played += 1
+
+            if net_payout > 0 and net_payout > self.biggest_win:
+                self.biggest_win = net_payout
+            if self.bankroll > self.bankroll_high:
+                self.bankroll_high = self.bankroll
 
             desc = result["result_description"]
             if "Blackjack" in desc and "win" in desc.lower():
@@ -179,4 +194,6 @@ class BlackjackSessionWorkflow:
             "total_wagered": self.total_wagered,
             "net_winnings": self.net_winnings,
             "starting_bankroll": STARTING_BANKROLL,
+            "biggest_win": self.biggest_win,
+            "bankroll_high": self.bankroll_high,
         }
