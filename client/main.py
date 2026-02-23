@@ -9,6 +9,7 @@ from temporalio.client import Client
 from shared.constants import MIN_BET, STARTING_BANKROLL, TASK_QUEUE
 from shared.models import Action
 from client.ui.renderer import (
+    LINE,
     render_error,
     render_result,
     render_session_summary,
@@ -30,7 +31,6 @@ async def wait_for_hand(handle, timeout: float = 10.0) -> str | None:
         if wf_id and wf_id != "pending":
             return wf_id
         if state["waiting_for_bet"]:
-            # Hand already completed
             return None
         await asyncio.sleep(0.2)
         elapsed += 0.2
@@ -115,9 +115,6 @@ async def main():
                 last = await handle.query(BlackjackSessionWorkflow.get_last_hand_result)
                 if last:
                     render_result(last)
-                    state = await handle.query(BlackjackSessionWorkflow.get_session_state)
-                    print(f"  Bankroll: ${state['bankroll']}")
-                print()
                 continue
 
             hand_handle = client.get_workflow_handle(hand_wf_id)
@@ -125,7 +122,7 @@ async def main():
             # Show initial deal
             try:
                 snap = await hand_handle.query(BlackjackHandWorkflow.get_snapshot)
-                render_snapshot(snap, state["bankroll"])
+                render_snapshot(snap)
             except Exception:
                 pass
 
@@ -143,8 +140,6 @@ async def main():
                 last = await handle.query(BlackjackSessionWorkflow.get_last_hand_result)
                 if last:
                     render_result(last)
-                print(f"  Bankroll: ${state['bankroll']}")
-                print()
                 continue
 
             # Player action loop
@@ -159,9 +154,8 @@ async def main():
                 except Exception:
                     break
 
-                # Show intermediate state (no bankroll yet, hand still in progress)
                 if not snap.get("hand_over", False):
-                    render_snapshot(snap, 0)
+                    render_snapshot(snap)
 
                 if snap.get("hand_over", False):
                     break
@@ -176,13 +170,15 @@ async def main():
                 if not available:
                     break
 
-            # Wait for result to propagate to parent, then show it
+            # Show "Dealer is playing..." then result
+            print()
+            print(LINE)
+            print("  Dealer is playing...")
+
             state = await wait_for_bet_ready(handle)
             last = await handle.query(BlackjackSessionWorkflow.get_last_hand_result)
             if last:
                 render_result(last)
-            print(f"  Bankroll: ${state['bankroll']}")
-            print()
 
     except KeyboardInterrupt:
         print("\n  Interrupted! Cashing out...")

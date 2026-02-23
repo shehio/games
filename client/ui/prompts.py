@@ -5,8 +5,7 @@ from shared.models import Action
 
 def prompt_bet(bankroll: int, min_bet: int) -> int | None:
     """Ask player for bet amount. Returns None if they want to cash out."""
-    print(f"  Bankroll: ${bankroll} | Min bet: ${min_bet}")
-    response = input(f"  Place your bet (or 'quit' to cash out): ").strip()
+    response = input("Place your bet (or 'quit' to cash out): ").strip()
     if not response:
         print("  Enter a number or 'quit'")
         return prompt_bet(bankroll, min_bet)
@@ -22,7 +21,7 @@ def prompt_bet(bankroll: int, min_bet: int) -> int | None:
             return prompt_bet(bankroll, min_bet)
         return bet
     except ValueError:
-        print("  Enter a number or 'q' to quit")
+        print("  Enter a number or 'quit'")
         return prompt_bet(bankroll, min_bet)
 
 
@@ -42,18 +41,18 @@ def prompt_action(available: list[str]) -> Action:
     shortcuts = []
     for a in available:
         if a == "hit":
-            shortcuts.append("(H)it")
+            shortcuts.append("(h)it")
         elif a == "stand":
-            shortcuts.append("(S)tand")
+            shortcuts.append("(s)tand")
         elif a == "double":
-            shortcuts.append("(D)ouble")
+            shortcuts.append("(d)ouble")
         elif a == "split":
-            shortcuts.append("s(P)lit")
+            shortcuts.append("s(p)lit")
 
-    print("  " + "  ".join(shortcuts))
+    prompt_text = "  ".join(shortcuts)
 
     while True:
-        response = input("  Action: ").strip().lower()
+        response = input(f"  Action? {prompt_text}: ").strip().lower()
         if response in action_map and action_map[response].value in available:
             return action_map[response]
         print(f"  Choose from: {', '.join(available)}")
