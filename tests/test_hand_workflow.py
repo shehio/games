@@ -1,0 +1,303 @@
+"""Tests for BlackjackHandWorkflow via Temporal test environment."""
+
+import pytest
+import pytest_asyncio
+from temporalio.testing import WorkflowEnvironment
+from temporalio.worker import Worker
+
+from shared.models import Card, Rank, Suit, card_to_dict
+from shared.constants import TASK_QUEUE
+from worker.workflows.blackjack_hand import BlackjackHandWorkflow
+
+
+def c(rank: Rank, suit: Suit = Suit.SPADES) -> dict:
+    """Helper to create a card dict."""
+    return card_to_dict(Card(rank, suit))
+
+
+def make_input(
+    bet: int,
+    player: list[dict],
+    dealer: list[dict],
+    shoe: list[dict] | None = None,
+) -> dict:
+    """Build the hand workflow input dict."""
+    if shoe is None:
+        # Provide a default shoe with enough cards for dealer draws
+        shoe = [
+            c(Rank.TWO), c(Rank.THREE), c(Rank.FOUR), c(Rank.FIVE),
+            c(Rank.SIX), c(Rank.SEVEN), c(Rank.EIGHT), c(Rank.NINE),
+            c(Rank.TEN), c(Rank.TWO, Suit.HEARTS), c(Rank.THREE, Suit.HEARTS),
+            c(Rank.FOUR, Suit.HEARTS), c(Rank.FIVE, Suit.HEARTS),
+        ]
+    return {
+        "bet": bet,
+        "player_cards": player,
+        "dealer_cards": dealer,
+        "shoe": shoe,
+    }
+
+
+@pytest_asyncio.fixture
+async def env():
+    async with await WorkflowEnvironment.start_time_skipping() as env:
+        yield env
+
+
+@pytest_asyncio.fixture
+async def run_hand(env: WorkflowEnvironment):
+    """Returns an async callable that starts the hand workflow and returns the result."""
+    async def _run(input_data: dict, task_id: str = "test-hand"):
+        async with Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[BlackjackHandWorkflow],
+        ):
+            result = await env.client.execute_workflow(
+                BlackjackHandWorkflow.run,
+                input_data,
+                id=task_id,
+                task_queue=TASK_QUEUE,
+            )
+            return result
+    return _run
+
+
+# ---------------------------------------------------------------------------
+# Natural blackjack scenarios (resolve immediately, no player actions needed)
+# ---------------------------------------------------------------------------
+
+class TestNaturalBlackjack:
+    @pytest.mark.asyncio
+    async def test_player_blackjack(self, run_hand):
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.ACE), c(Rank.KING)],
+            dealer=[c(Rank.SEVEN), c(Rank.NINE)],
+        )
+        result = await run_hand(inp)
+        assert result["net_payout"] == 150  # bet*1.5
+        assert "Blackjack" in result["result_description"]
+
+    @pytest.mark.asyncio
+    async def test_dealer_blackjack(self, run_hand):
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.NINE)],
+            dealer=[c(Rank.ACE), c(Rank.TEN)],
+        )
+        result = await run_hand(inp)
+        assert result["net_payout"] == -100
+        assert "Dealer" in result["result_description"]
+
+    @pytest.mark.asyncio
+    async def test_both_blackjack_push(self, run_hand):
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.ACE), c(Rank.KING)],
+            dealer=[c(Rank.ACE), c(Rank.QUEEN)],
+        )
+        result = await run_hand(inp)
+        assert result["net_payout"] == 0
+        assert "Push" in result["result_description"]
+
+
+# ---------------------------------------------------------------------------
+# Player actions
+# ---------------------------------------------------------------------------
+
+class TestPlayerBust:
+    @pytest.mark.asyncio
+    async def test_player_busts(self, env: WorkflowEnvironment):
+        # Player: 10+6=16, shoe has K so hit -> 26 bust
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.SIX)],
+            dealer=[c(Rank.SEVEN), c(Rank.EIGHT)],
+            shoe=[c(Rank.KING)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run, inp, id="bust-test", task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "hit", "hand_index": 0},
+            )
+            result = await handle.result()
+        assert result["net_payout"] == -100
+        assert "Bust" in result["result_description"]
+
+
+class TestDealerBust:
+    @pytest.mark.asyncio
+    async def test_dealer_busts(self, env: WorkflowEnvironment):
+        # Player: 10+8=18, stand. Dealer: 6+5=11, shoe: K(->21 no, 6+5+K=21), let's use 6+5, shoe: 9 -> 20, then K -> 30 bust
+        # Dealer: 6+5=11, draws 5->16, draws K->26 bust
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.EIGHT)],
+            dealer=[c(Rank.SIX), c(Rank.FIVE)],
+            shoe=[c(Rank.FIVE, Suit.HEARTS), c(Rank.KING)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run, inp, id="dealer-bust", task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            result = await handle.result()
+        assert result["net_payout"] == 100
+        assert "bust" in result["result_description"].lower()
+
+
+class TestPlayerWins:
+    @pytest.mark.asyncio
+    async def test_player_higher_total(self, env: WorkflowEnvironment):
+        # Player: 10+9=19, stand. Dealer: 10+7=17, stands.
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.NINE)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.SEVEN)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run, inp, id="player-wins", task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            result = await handle.result()
+        assert result["net_payout"] == 100
+        assert "Win" in result["result_description"]
+
+
+class TestPlayerLoses:
+    @pytest.mark.asyncio
+    async def test_player_lower_total(self, env: WorkflowEnvironment):
+        # Player: 10+7=17, stand. Dealer: 10+9=19, stands.
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.SEVEN)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.NINE)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run, inp, id="player-loses", task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            result = await handle.result()
+        assert result["net_payout"] == -100
+        assert "Lose" in result["result_description"]
+
+
+class TestPush:
+    @pytest.mark.asyncio
+    async def test_equal_totals(self, env: WorkflowEnvironment):
+        # Player: 10+8=18, stand. Dealer: 10+8=18, stands.
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.EIGHT)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.EIGHT, Suit.HEARTS)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run, inp, id="push-test", task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            result = await handle.result()
+        assert result["net_payout"] == 0
+        assert "Push" in result["result_description"]
+
+
+class TestDoubleDown:
+    @pytest.mark.asyncio
+    async def test_double_down(self, env: WorkflowEnvironment):
+        # Player: 5+6=11, double. Shoe has 10 -> 21. Dealer: 10+7=17, stands.
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.FIVE), c(Rank.SIX)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.SEVEN)],
+            shoe=[c(Rank.TEN)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run, inp, id="double-test", task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "double", "hand_index": 0},
+            )
+            result = await handle.result()
+        # Doubled bet = 200, won -> payout 400, net = 400 - 200 = 200
+        assert result["net_payout"] == 200
+        assert "Win" in result["result_description"]
+
+
+class TestSplit:
+    @pytest.mark.asyncio
+    async def test_split(self, env: WorkflowEnvironment):
+        # Player: 8+8, split. Shoe: [K, Q, ...]. Hand1: 8+K=18, Hand2: 8+Q=18.
+        # Dealer: 10+6=16, shoe after split: [5] -> 21. Dealer wins both.
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.EIGHT), c(Rank.EIGHT, Suit.HEARTS)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.SIX)],
+            shoe=[c(Rank.KING), c(Rank.QUEEN), c(Rank.FIVE, Suit.HEARTS)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run, inp, id="split-test", task_queue=TASK_QUEUE,
+            )
+            # Split
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "split", "hand_index": 0},
+            )
+            # Stand on first hand (8+K=18)
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            # Stand on second hand (8+Q=18)
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 1},
+            )
+            result = await handle.result()
+        # Dealer: 10+6+5=21, both player hands lose (18 vs 21)
+        assert result["net_payout"] == -200  # lost both 100 bets
+
+
+class TestDealerStandsOn17:
+    @pytest.mark.asyncio
+    async def test_dealer_stands_on_17(self, env: WorkflowEnvironment):
+        # Player: 10+8=18, stand. Dealer: 10+7=17, should NOT draw more.
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.EIGHT)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.SEVEN)],
+            shoe=[c(Rank.ACE)],  # Dealer should not draw this
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run, inp, id="dealer-17", task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            result = await handle.result()
+        # Dealer stayed at 17, player wins with 18
+        assert result["net_payout"] == 100
+        # Shoe should still have the ace (dealer didn't draw)
+        assert len(result["remaining_shoe"]) == 1
