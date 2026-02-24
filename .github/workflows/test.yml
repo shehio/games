@@ -25,3 +25,8 @@ jobs:
         run: pytest tests/ -v
         env:
           PYTHONPATH: .
+
+      - name: Run shoe penetration simulation (smoke test)
+        run: python -m simulations.shoe_penetration
+        env:
+          PYTHONPATH: .
