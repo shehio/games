@@ -69,6 +69,22 @@ docker compose --profile play run --rm client
 - Split and double down supported
 - $1000 starting bankroll, $10 minimum bet
 
+## Simulation
+
+A Monte Carlo simulation sweeps reshuffle thresholds across the 6-deck shoe to
+find the optimal penetration depth. It plays 100,000 hands per threshold using
+basic strategy and reports house edge, hands per shoe, and blackjack rate.
+
+```bash
+PYTHONPATH=. python -m simulations.shoe_penetration
+```
+
+Run the simulation tests:
+
+```bash
+PYTHONPATH=. pytest tests/test_shoe_penetration.py -v
+```
+
 ## Stack
 
 - Python, Temporal Python SDK
