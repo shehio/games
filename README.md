@@ -5,49 +5,49 @@ A fully Dockerized Blackjack game powered by [Temporal.io](https://temporal.io) 
 ## Architecture
 
 ```
-┌─ Docker Compose ─────────────────────────────────────────────────┐
-│                                                                  │
-│  ┌──────────┐    updates, queries,    ┌───────────────────────┐  │
-│  │  Client   │◄──── signals ─────────►│   Temporal Server     │  │
-│  │  (CLI)    │                        │       ▲               │  │
-│  └──────────┘                        │       │  ┌──────────┐ │  │
-│                                       │       │  │ Postgres │ │  │
-│                                       │       │  └──────────┘ │  │
-│                                       └───────┼───────────────┘  │
-│                                               │                  │
-│                                               ▼                  │
-│                              ┌────────────────────────────────┐  │
-│                              │  Worker                        │  │
-│                              │                                │  │
-│                              │  Session WF ──spawns──► Hand WF│  │
-│                              │      │                         │  │
-│                              │      └──calls──► shuffle_deck()│  │
-│                              └────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
++-- Docker Compose -----------------------------------------------+
+|                                                                  |
+|  +----------+  updates, queries,  +------------------------+     |
+|  |  Client  |<---- signals ------>|   Temporal Server      |     |
+|  |  (CLI)   |                     |       ^                |     |
+|  +----------+                     |       |  +----------+  |     |
+|                                   |       |  | Postgres |  |     |
+|                                   |       |  +----------+  |     |
+|                                   +-------+----------------+     |
+|                                           |                      |
+|                                           v                      |
+|                            +---------------------------------+   |
+|                            |  Worker                         |   |
+|                            |                                 |   |
+|                            |  Session WF --spawns--> Hand WF |   |
+|                            |      |                          |   |
+|                            |      +--calls--> shuffle_deck() |   |
+|                            +---------------------------------+   |
++------------------------------------------------------------------+
 ```
 
 ```
-  Client              Session WF            Hand WF
-    │                     │                     │
-    │── place_bet ───────►│                     │
-    │   (update)          │── start child ─────►│
-    │                     │                     │
-    │── player_action ──────────────────────────►
-    │   (update)          │                     │
-    │◄─────────────────────────── snapshot ─────│
-    │                     │                     │
-    │── player_action ──────────────────────────►
-    │   (update)          │                     │
-    │◄──────────────── snapshot (hand_over) ────│
-    │                     │◄── hand result ─────│
-    │                     │                     │
-    │── query last result►│                     │
-    │◄── result ──────────│                     │
-    │                     │                     │
-    │── cash_out ────────►│                     │
-    │   (signal)          │                     │
-    │◄── session summary──│                     │
-    ▼                     ▼                     ▼
+  Client                Session WF              Hand WF
+    |                       |                       |
+    |-- place_bet --------->|                       |
+    |   (update)            |-- start child ------->|
+    |                       |                       |
+    |-- player_action ----->|---------------------->|
+    |   (update)            |                       |
+    |<----------------------|-------- snapshot -----|
+    |                       |                       |
+    |-- player_action ----->|---------------------->|
+    |   (update)            |                       |
+    |<----------------------|- snapshot (hand_over) |
+    |                       |<-- hand result -------|
+    |                       |                       |
+    |-- query last result ->|                       |
+    |<-- result ------------|                       |
+    |                       |                       |
+    |-- cash_out ---------->|                       |
+    |   (signal)            |                       |
+    |<-- session summary ---|                       |
+    v                       v                       v
 ```
 
 - **Parent workflow** (`BlackjackSessionWorkflow`) - Manages bankroll, 6-deck shoe, and session stats. Spawns one child workflow per hand.
