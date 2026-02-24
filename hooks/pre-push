@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+
+if ! command -v pytest &>/dev/null; then
+    echo "Warning: pytest not found — skipping pre-push tests"
+    exit 0
+fi
+
+echo "Running full test suite (pre-push)..."
+PYTHONPATH=. pytest tests/ -v
