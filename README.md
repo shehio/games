@@ -4,43 +4,50 @@ A fully Dockerized Blackjack game powered by [Temporal.io](https://temporal.io) 
 
 ## Architecture
 
-```mermaid
-graph LR
-    subgraph Docker Compose
-        Client["Client (CLI)"]
-        subgraph Temporal
-            Server[Temporal Server]
-            Postgres[(Postgres)]
-        end
-        subgraph Worker
-            Session["Session WF (parent)"]
-            Hand["Hand WF (child)"]
-            Activity["shuffle_deck() (activity)"]
-            Session -->|spawns| Hand
-            Session -->|calls| Activity
-        end
-        Client <-->|updates, queries, signals| Server
-        Server <--> Worker
-    end
+```
+┌─ Docker Compose ─────────────────────────────────────────────────┐
+│                                                                  │
+│  ┌──────────┐    updates, queries,    ┌───────────────────────┐  │
+│  │  Client   │◄──── signals ─────────►│   Temporal Server     │  │
+│  │  (CLI)    │                        │       ▲               │  │
+│  └──────────┘                        │       │  ┌──────────┐ │  │
+│                                       │       │  │ Postgres │ │  │
+│                                       │       │  └──────────┘ │  │
+│                                       └───────┼───────────────┘  │
+│                                               │                  │
+│                                               ▼                  │
+│                              ┌────────────────────────────────┐  │
+│                              │  Worker                        │  │
+│                              │                                │  │
+│                              │  Session WF ──spawns──► Hand WF│  │
+│                              │      │                         │  │
+│                              │      └──calls──► shuffle_deck()│  │
+│                              └────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant S as Session WF
-    participant H as Hand WF
-
-    C->>S: place_bet (update)
-    S->>H: start child workflow
-    C->>H: player_action (update)
-    H-->>C: snapshot
-    C->>H: player_action (update)
-    H-->>C: snapshot (hand_over)
-    H-->>S: hand result
-    C->>S: query last result
-    S-->>C: result
-    C->>S: cash_out (signal)
-    S-->>C: session summary
+```
+  Client              Session WF            Hand WF
+    │                     │                     │
+    │── place_bet ───────►│                     │
+    │   (update)          │── start child ─────►│
+    │                     │                     │
+    │── player_action ──────────────────────────►
+    │   (update)          │                     │
+    │◄─────────────────────────── snapshot ─────│
+    │                     │                     │
+    │── player_action ──────────────────────────►
+    │   (update)          │                     │
+    │◄──────────────── snapshot (hand_over) ────│
+    │                     │◄── hand result ─────│
+    │                     │                     │
+    │── query last result►│                     │
+    │◄── result ──────────│                     │
+    │                     │                     │
+    │── cash_out ────────►│                     │
+    │   (signal)          │                     │
+    │◄── session summary──│                     │
+    ▼                     ▼                     ▼
 ```
 
 - **Parent workflow** (`BlackjackSessionWorkflow`) - Manages bankroll, 6-deck shoe, and session stats. Spawns one child workflow per hand.
