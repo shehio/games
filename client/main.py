@@ -123,15 +123,16 @@ async def main():
             try:
                 snap = await hand_handle.query(BlackjackHandWorkflow.get_snapshot)
                 render_snapshot(snap)
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"  (Could not load initial deal: {e})")
 
             # Check if hand needs player input
             try:
                 available = await hand_handle.query(
                     BlackjackHandWorkflow.get_available_actions
                 )
-            except Exception:
+            except Exception as e:
+                print(f"  (Could not query actions: {e})")
                 available = []
 
             if not available:
@@ -151,7 +152,8 @@ async def main():
                         BlackjackHandWorkflow.player_action,
                         {"action": action.value, "hand_index": 0},
                     )
-                except Exception:
+                except Exception as e:
+                    render_error(f"Action failed: {e}")
                     break
 
                 if not snap.get("hand_over", False):
@@ -164,7 +166,8 @@ async def main():
                     available = await hand_handle.query(
                         BlackjackHandWorkflow.get_available_actions
                     )
-                except Exception:
+                except Exception as e:
+                    print(f"  (Could not query actions: {e})")
                     break
 
                 if not available:
@@ -184,16 +187,20 @@ async def main():
         print("\n  Interrupted! Cashing out...")
         try:
             await handle.signal(BlackjackSessionWorkflow.cash_out)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"  (Could not signal cash out: {e})")
 
     # Final summary
     try:
         result = await handle.result()
         render_session_summary(result, player_name, session_id)
-    except Exception:
-        state = await handle.query(BlackjackSessionWorkflow.get_session_state)
-        print(f"\n  Final bankroll: ${state['bankroll']}")
+    except Exception as e:
+        print(f"\n  (Could not get session result: {e})")
+        try:
+            state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+            print(f"  Final bankroll: ${state['bankroll']}")
+        except Exception:
+            print("  (Could not retrieve final state)")
 
 
 if __name__ == "__main__":
