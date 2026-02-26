@@ -1,9 +1,11 @@
 FROM python:3.12-slim
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
 WORKDIR /app
 
-COPY worker/requirements.txt /app/worker/requirements.txt
-RUN pip install --no-cache-dir -r /app/worker/requirements.txt
+COPY pyproject.toml uv.lock /app/
+RUN uv sync --frozen --no-dev --no-install-project
 
 COPY shared/ /app/shared/
 COPY worker/ /app/worker/
@@ -11,4 +13,4 @@ COPY worker/ /app/worker/
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "-m", "worker.main"]
+CMD ["uv", "run", "python", "-m", "worker.main"]

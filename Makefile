@@ -1,5 +1,5 @@
 test:
-	PYTHONPATH=. python3 -m pytest tests/ -v
+	uv run pytest tests/ -v
 
 install-hooks:
 	@for hook in hooks/*; do \

@@ -1,0 +1,14 @@
+[project]
+name = "blackjack-casino"
+version = "0.1.0"
+description = "A Dockerized Blackjack game powered by Temporal.io workflows"
+requires-python = ">=3.12"
+dependencies = [
+    "temporalio>=1.7.1,<2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
