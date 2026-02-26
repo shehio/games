@@ -69,20 +69,42 @@ docker compose --profile play run --rm client
 - Split and double down supported
 - $1000 starting bankroll, $10 minimum bet
 
-## Simulation
+## Simulations
+
+### Shoe Penetration
 
 A Monte Carlo simulation sweeps reshuffle thresholds across the 6-deck shoe to
 find the optimal penetration depth. It plays 100,000 hands per threshold using
 basic strategy and reports house edge, hands per shoe, and blackjack rate.
 
 ```bash
-PYTHONPATH=. python -m simulations.shoe_penetration
+uv run python -m simulations.shoe_penetration
 ```
 
-Run the simulation tests:
+### Card Counting & Betting Strategies
+
+Combines three card counting systems with four betting strategies and sweeps
+across penetration thresholds to measure their effect on house edge.
+
+**Counting systems:**
+- **Hi-Lo** — balanced, single-level (2-6 = +1, 7-9 = 0, 10-A = -1)
+- **Omega II** — balanced, multi-level (more precise but harder to use)
+- **KO (Knock-Out)** — unbalanced (no true count conversion needed)
+
+**Betting strategies:**
+- **Flat** — constant bet (baseline)
+- **Spread** — scales linearly with true count, capped at max spread
+- **Kelly** — bets proportional to estimated edge (~0.5% per true count point)
+- **Martingale** — doubles after loss (cautionary example)
 
 ```bash
-PYTHONPATH=. pytest tests/test_shoe_penetration.py -v
+uv run python -m simulations.counting_simulation
+```
+
+### Run Tests
+
+```bash
+uv run pytest tests/ -v
 ```
 
 ## Stack
