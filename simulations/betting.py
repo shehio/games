@@ -23,7 +23,7 @@ class BettingStrategy(ABC):
     def get_bet(self, true_count: float, previous_net: int) -> int:
         """Return the bet size given current true count and previous hand net."""
 
-    def reset(self) -> None:
+    def reset(self) -> None:  # noqa: B027
         """Reset strategy state for a new shoe."""
 
 
@@ -41,9 +41,7 @@ class SpreadBetting(BettingStrategy):
     true count point up to the cap.
     """
 
-    def __init__(
-        self, base_bet: int = 100, min_bet: int = 10, max_spread: int = 8
-    ) -> None:
+    def __init__(self, base_bet: int = 100, min_bet: int = 10, max_spread: int = 8) -> None:
         super().__init__(base_bet, min_bet)
         self.max_spread = max_spread
 
@@ -61,9 +59,7 @@ class KellyBetting(BettingStrategy):
     Kelly fraction of bankroll = edge / odds (simplified to edge for even money).
     """
 
-    def __init__(
-        self, base_bet: int = 100, min_bet: int = 10, bankroll: int = 10_000
-    ) -> None:
+    def __init__(self, base_bet: int = 100, min_bet: int = 10, bankroll: int = 10_000) -> None:
         super().__init__(base_bet, min_bet)
         self.bankroll = bankroll
         self._initial_bankroll = bankroll
@@ -86,9 +82,7 @@ class MartingaleBetting(BettingStrategy):
     Included as a cautionary example — does not overcome house edge.
     """
 
-    def __init__(
-        self, base_bet: int = 100, min_bet: int = 10, max_bet: int = 10_000
-    ) -> None:
+    def __init__(self, base_bet: int = 100, min_bet: int = 10, max_bet: int = 10_000) -> None:
         super().__init__(base_bet, min_bet)
         self.max_bet = max_bet
         self._current_bet = base_bet

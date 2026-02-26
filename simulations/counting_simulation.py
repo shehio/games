@@ -10,7 +10,6 @@ import random
 from dataclasses import dataclass
 
 from shared.models import Card
-
 from simulations.betting import (
     BettingStrategy,
     FlatBetting,

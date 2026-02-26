@@ -2,9 +2,6 @@
 
 from shared.models import (
     Card,
-    HandResult,
-    HandSnapshot,
-    HandState,
     best_total,
     snapshot_from_dict,
 )
@@ -67,7 +64,6 @@ def render_snapshot(snap_dict: dict, bankroll: int = 0) -> None:
         # Only render the first (face-up) card
         card_str = render_hand_str(snap.dealer_cards[:1])
     else:
-        dealer_total = best_total(snap.dealer_cards)
         print("  DEALER'S HAND:")
         card_str = render_hand_str(snap.dealer_cards)
 
@@ -83,10 +79,7 @@ def render_snapshot(snap_dict: dict, bankroll: int = 0) -> None:
         hand_str = render_hand_str(hand.cards)
 
         print()
-        if len(snap.player_hands) > 1:
-            label = f"  HAND {i+1}:"
-        else:
-            label = "  YOUR HAND:"
+        label = f"  HAND {i + 1}:" if len(snap.player_hands) > 1 else "  YOUR HAND:"
         if hand.is_doubled:
             label += " [DOUBLED]"
         print(label)
@@ -122,10 +115,7 @@ def render_result(hand_result: dict) -> None:
         hand_str = render_hand_str(hand.cards)
 
         print()
-        if len(snap.player_hands) > 1:
-            label = f"  HAND {i+1}:"
-        else:
-            label = "  YOUR HAND:"
+        label = f"  HAND {i + 1}:" if len(snap.player_hands) > 1 else "  YOUR HAND:"
         print(label)
 
         for line in hand_str.split("\n"):
@@ -137,19 +127,18 @@ def render_result(hand_result: dict) -> None:
     print()
     print(LINE)
 
-    desc = hand_result["result_description"]
     net = hand_result["net_payout"]
     total_bet = sum(h.bet for h in snap.player_hands)
     total_payout = total_bet + net
 
     if net > 0:
-        print(f"  You WIN!")
+        print("  You WIN!")
         print(f"  Payout: ${total_payout} (net +${net})")
     elif net < 0:
-        print(f"  You LOSE.")
+        print("  You LOSE.")
         print(f"  Lost: ${abs(net)}")
     else:
-        print(f"  PUSH.")
+        print("  PUSH.")
         print(f"  Bet returned: ${total_bet}")
 
     print(LINE)
@@ -177,13 +166,14 @@ def render_session_summary(summary: dict, player_name: str, session_id: str) -> 
     print(f"  Player: {player_name}")
     print(f"  Final bankroll: ${summary['final_bankroll']}")
     print(f"  Hands played: {summary['hands_played']}")
-    print(f"  Won: {summary['hands_won']}  |  Lost: {summary['hands_lost']}  |  Pushed: {summary['hands_pushed']}")
+    won, lost, pushed = summary["hands_won"], summary["hands_lost"], summary["hands_pushed"]
+    print(f"  Won: {won}  |  Lost: {lost}  |  Pushed: {pushed}")
     print(f"  Biggest win: ${summary['biggest_win']}")
     print(f"  Bankroll high: ${summary['bankroll_high']}")
     print()
     print(f"  Thanks for playing, {player_name}!")
     print(f"  Session ID: {session_id}")
-    print(f"  View in Temporal UI: http://localhost:8080")
+    print("  View in Temporal UI: http://localhost:8080")
     print()
 
 

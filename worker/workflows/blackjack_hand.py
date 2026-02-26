@@ -1,6 +1,3 @@
-import asyncio
-from datetime import timedelta
-
 from temporalio import workflow
 
 with workflow.unsafe.imports_passed_through():
@@ -14,10 +11,7 @@ with workflow.unsafe.imports_passed_through():
         best_total,
         card_from_dict,
         card_to_dict,
-        hand_state_to_dict,
-        hand_state_from_dict,
         is_blackjack,
-        result_info_to_dict,
         snapshot_to_dict,
     )
 
@@ -81,7 +75,9 @@ class BlackjackHandWorkflow:
 
         if action not in available:
             return snapshot_to_dict(
-                self._build_snapshot(f"Invalid action. Choose from: {', '.join(a.value for a in available)}")
+                self._build_snapshot(
+                    f"Invalid action. Choose from: {', '.join(a.value for a in available)}"
+                )
             )
 
         if action == Action.HIT:
@@ -141,9 +137,10 @@ class BlackjackHandWorkflow:
 
     @workflow.run
     async def run(self, input_data: dict) -> dict:
-        """
-        input_data: {"bet": int, "shoe": list[card_dict], "dealer_cards": list[card_dict], "player_cards": list[card_dict]}
-        Returns: {"net_payout": int, "result_description": str, "final_snapshot": snapshot_dict, "remaining_shoe": list[card_dict]}
+        """Run one hand of blackjack.
+
+        input_data keys: bet, shoe, dealer_cards, player_cards (all card dicts).
+        Returns: net_payout, result_description, final_snapshot, remaining_shoe.
         """
         self.bet = input_data["bet"]
         self.shoe = [card_from_dict(c) for c in input_data["shoe"]]
@@ -168,7 +165,8 @@ class BlackjackHandWorkflow:
                 desc = "Blackjack! You win!"
 
             return {
-                "net_payout": sum(h.payout for h in self.player_hands) - sum(h.bet for h in self.player_hands),
+                "net_payout": sum(h.payout for h in self.player_hands)
+                - sum(h.bet for h in self.player_hands),
                 "result_description": desc,
                 "final_snapshot": snapshot_to_dict(self._build_snapshot(desc)),
                 "remaining_shoe": [card_to_dict(c) for c in self.shoe],
@@ -189,9 +187,7 @@ class BlackjackHandWorkflow:
             }
 
         # Wait for player to finish all hands
-        await workflow.wait_condition(
-            lambda: all(h.is_done for h in self.player_hands)
-        )
+        await workflow.wait_condition(lambda: all(h.is_done for h in self.player_hands))
 
         # Dealer plays
         self.hand_over = True
@@ -207,7 +203,7 @@ class BlackjackHandWorkflow:
         # Resolve each hand
         descriptions = []
         for i, hand in enumerate(self.player_hands):
-            prefix = f"Hand {i+1}: " if len(self.player_hands) > 1 else ""
+            prefix = f"Hand {i + 1}: " if len(self.player_hands) > 1 else ""
             player_total = best_total(hand.cards)
 
             if hand.result == HandResult.BUST:

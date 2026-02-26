@@ -1,15 +1,13 @@
 """Tests for the Monte Carlo shoe penetration simulation."""
 
-import pytest
-
-from shared.models import Card, Rank, Suit, best_total, is_blackjack
+from shared.models import Card, Rank, Suit
 from simulations.shoe_penetration import (
+    BET,
+    Action,
     basic_strategy_decision,
     build_shoe,
     run_simulation,
     simulate_hand,
-    BET,
-    Action,
 )
 
 
@@ -43,10 +41,10 @@ class TestBlackjackPayouts:
 
     def test_player_blackjack_pays_3_to_2(self):
         shoe = [
-            Card(Rank.ACE, Suit.SPADES),     # player 1
-            Card(Rank.KING, Suit.HEARTS),    # player 2
-            Card(Rank.SEVEN, Suit.HEARTS),   # dealer 1
-            Card(Rank.SEVEN, Suit.CLUBS),    # dealer 2
+            Card(Rank.ACE, Suit.SPADES),  # player 1
+            Card(Rank.KING, Suit.HEARTS),  # player 2
+            Card(Rank.SEVEN, Suit.HEARTS),  # dealer 1
+            Card(Rank.SEVEN, Suit.CLUBS),  # dealer 2
         ] + self._filler
         outcome = simulate_hand(shoe)
         assert outcome.is_blackjack is True
@@ -54,10 +52,10 @@ class TestBlackjackPayouts:
 
     def test_both_blackjack_is_push(self):
         shoe = [
-            Card(Rank.ACE, Suit.SPADES),     # player 1
-            Card(Rank.KING, Suit.HEARTS),    # player 2
-            Card(Rank.ACE, Suit.HEARTS),     # dealer 1
-            Card(Rank.QUEEN, Suit.CLUBS),    # dealer 2
+            Card(Rank.ACE, Suit.SPADES),  # player 1
+            Card(Rank.KING, Suit.HEARTS),  # player 2
+            Card(Rank.ACE, Suit.HEARTS),  # dealer 1
+            Card(Rank.QUEEN, Suit.CLUBS),  # dealer 2
         ] + self._filler
         outcome = simulate_hand(shoe)
         assert outcome.is_blackjack is True
@@ -65,10 +63,10 @@ class TestBlackjackPayouts:
 
     def test_dealer_blackjack_player_loses(self):
         shoe = [
-            Card(Rank.SEVEN, Suit.SPADES),   # player 1
-            Card(Rank.EIGHT, Suit.HEARTS),   # player 2
-            Card(Rank.ACE, Suit.HEARTS),     # dealer 1
-            Card(Rank.KING, Suit.CLUBS),     # dealer 2
+            Card(Rank.SEVEN, Suit.SPADES),  # player 1
+            Card(Rank.EIGHT, Suit.HEARTS),  # player 2
+            Card(Rank.ACE, Suit.HEARTS),  # dealer 1
+            Card(Rank.KING, Suit.CLUBS),  # dealer 2
         ] + self._filler
         outcome = simulate_hand(shoe)
         assert outcome.is_blackjack is False

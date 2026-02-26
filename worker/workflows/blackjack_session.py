@@ -1,22 +1,19 @@
-import uuid
 from datetime import timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from shared.models import (
-        Card,
-        PlaceBetInput,
-        SessionState,
-        card_from_dict,
-        card_to_dict,
-    )
     from shared.constants import (
         MIN_BET,
         RESHUFFLE_THRESHOLD,
         STARTING_BANKROLL,
         TASK_QUEUE,
+    )
+    from shared.models import (
+        Card,
+        card_from_dict,
+        card_to_dict,
     )
     from worker.activities.deck import shuffle_deck
     from worker.workflows.blackjack_hand import BlackjackHandWorkflow
@@ -65,7 +62,10 @@ class BlackjackSessionWorkflow:
 
     @workflow.update
     async def place_bet(self, inp: dict) -> dict:
-        """Place a bet and start a new hand. Returns {"ok": bool, "error": str|None, "hand_workflow_id": str|None}."""
+        """Place a bet and start a new hand.
+
+        Returns dict with ok, error, and hand_workflow_id.
+        """
         if self.session_over:
             return {"ok": False, "error": "Session is over.", "hand_workflow_id": None}
 
@@ -76,7 +76,11 @@ class BlackjackSessionWorkflow:
         if amount < MIN_BET:
             return {"ok": False, "error": f"Minimum bet is ${MIN_BET}.", "hand_workflow_id": None}
         if amount > self.bankroll:
-            return {"ok": False, "error": f"Not enough bankroll. You have ${self.bankroll}.", "hand_workflow_id": None}
+            return {
+                "ok": False,
+                "error": f"Not enough bankroll. You have ${self.bankroll}.",
+                "hand_workflow_id": None,
+            }
 
         self.waiting_for_bet = False
         self.bankroll -= amount

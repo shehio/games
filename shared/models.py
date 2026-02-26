@@ -1,16 +1,15 @@
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Optional
+from enum import StrEnum
 
 
-class Suit(str, Enum):
+class Suit(StrEnum):
     HEARTS = "♥"
     DIAMONDS = "♦"
     CLUBS = "♣"
     SPADES = "♠"
 
 
-class Rank(str, Enum):
+class Rank(StrEnum):
     TWO = "2"
     THREE = "3"
     FOUR = "4"
@@ -26,14 +25,14 @@ class Rank(str, Enum):
     ACE = "A"
 
 
-class Action(str, Enum):
+class Action(StrEnum):
     HIT = "hit"
     STAND = "stand"
     DOUBLE = "double"
     SPLIT = "split"
 
 
-class HandResult(str, Enum):
+class HandResult(StrEnum):
     WIN = "win"
     LOSE = "lose"
     PUSH = "push"
@@ -75,7 +74,7 @@ class HandState:
     bet: int = 0
     is_done: bool = False
     is_doubled: bool = False
-    result: Optional[HandResult] = None
+    result: HandResult | None = None
     payout: int = 0
 
     def display_cards(self) -> str:
@@ -108,7 +107,7 @@ class SessionState:
     blackjacks: int = 0
     total_wagered: int = 0
     net_winnings: int = 0
-    active_hand_workflow_id: Optional[str] = None
+    active_hand_workflow_id: str | None = None
     waiting_for_bet: bool = True
     session_over: bool = False
     shoe_cards_remaining: int = 0

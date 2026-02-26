@@ -3,9 +3,9 @@
 import pytest
 from temporalio.testing import ActivityEnvironment
 
-from worker.activities.deck import shuffle_deck
 from shared.constants import NUM_DECKS
 from shared.models import Rank, Suit
+from worker.activities.deck import shuffle_deck
 
 
 @pytest.fixture

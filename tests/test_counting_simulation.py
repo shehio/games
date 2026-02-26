@@ -63,16 +63,12 @@ class TestRunCountingSimulation:
 
 class TestSweepStrategies:
     def test_returns_correct_count(self):
-        results = sweep_strategies(
-            thresholds=[78], num_hands=1000, seed=42
-        )
+        results = sweep_strategies(thresholds=[78], num_hands=1000, seed=42)
         # 1 threshold × 3 counters × 4 bettors = 12
         assert len(results) == 12
 
     def test_all_results_have_expected_fields(self):
-        results = sweep_strategies(
-            thresholds=[78], num_hands=1000, seed=42
-        )
+        results = sweep_strategies(thresholds=[78], num_hands=1000, seed=42)
         for r in results:
             assert r.threshold == 78
             assert r.hands_played == 1000

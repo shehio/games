@@ -6,8 +6,7 @@ import uuid
 
 from temporalio.client import Client
 
-from shared.constants import MIN_BET, STARTING_BANKROLL, TASK_QUEUE
-from shared.models import Action
+from client.ui.prompts import confirm_cash_out, prompt_action, prompt_bet
 from client.ui.renderer import (
     LINE,
     render_error,
@@ -17,9 +16,9 @@ from client.ui.renderer import (
     render_stats_bar,
     render_welcome,
 )
-from client.ui.prompts import confirm_cash_out, prompt_action, prompt_bet
-from worker.workflows.blackjack_session import BlackjackSessionWorkflow
+from shared.constants import MIN_BET, STARTING_BANKROLL, TASK_QUEUE
 from worker.workflows.blackjack_hand import BlackjackHandWorkflow
+from worker.workflows.blackjack_session import BlackjackSessionWorkflow
 
 
 async def wait_for_hand(handle, timeout: float = 10.0) -> str | None:
@@ -128,9 +127,7 @@ async def main():
 
             # Check if hand needs player input
             try:
-                available = await hand_handle.query(
-                    BlackjackHandWorkflow.get_available_actions
-                )
+                available = await hand_handle.query(BlackjackHandWorkflow.get_available_actions)
             except Exception as e:
                 print(f"  (Could not query actions: {e})")
                 available = []
@@ -163,9 +160,7 @@ async def main():
                     break
 
                 try:
-                    available = await hand_handle.query(
-                        BlackjackHandWorkflow.get_available_actions
-                    )
+                    available = await hand_handle.query(BlackjackHandWorkflow.get_available_actions)
                 except Exception as e:
                     print(f"  (Could not query actions: {e})")
                     break

@@ -5,8 +5,8 @@ import pytest_asyncio
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
-from shared.models import Card, Rank, Suit, card_to_dict
 from shared.constants import TASK_QUEUE
+from shared.models import Card, Rank, Suit, card_to_dict
 from worker.workflows.blackjack_hand import BlackjackHandWorkflow
 
 
@@ -25,10 +25,19 @@ def make_input(
     if shoe is None:
         # Provide a default shoe with enough cards for dealer draws
         shoe = [
-            c(Rank.TWO), c(Rank.THREE), c(Rank.FOUR), c(Rank.FIVE),
-            c(Rank.SIX), c(Rank.SEVEN), c(Rank.EIGHT), c(Rank.NINE),
-            c(Rank.TEN), c(Rank.TWO, Suit.HEARTS), c(Rank.THREE, Suit.HEARTS),
-            c(Rank.FOUR, Suit.HEARTS), c(Rank.FIVE, Suit.HEARTS),
+            c(Rank.TWO),
+            c(Rank.THREE),
+            c(Rank.FOUR),
+            c(Rank.FIVE),
+            c(Rank.SIX),
+            c(Rank.SEVEN),
+            c(Rank.EIGHT),
+            c(Rank.NINE),
+            c(Rank.TEN),
+            c(Rank.TWO, Suit.HEARTS),
+            c(Rank.THREE, Suit.HEARTS),
+            c(Rank.FOUR, Suit.HEARTS),
+            c(Rank.FIVE, Suit.HEARTS),
         ]
     return {
         "bet": bet,
@@ -47,6 +56,7 @@ async def env():
 @pytest_asyncio.fixture
 async def run_hand(env: WorkflowEnvironment):
     """Returns an async callable that starts the hand workflow and returns the result."""
+
     async def _run(input_data: dict, task_id: str = "test-hand"):
         async with Worker(
             env.client,
@@ -60,12 +70,14 @@ async def run_hand(env: WorkflowEnvironment):
                 task_queue=TASK_QUEUE,
             )
             return result
+
     return _run
 
 
 # ---------------------------------------------------------------------------
 # Natural blackjack scenarios (resolve immediately, no player actions needed)
 # ---------------------------------------------------------------------------
+
 
 class TestNaturalBlackjack:
     @pytest.mark.asyncio
@@ -106,6 +118,7 @@ class TestNaturalBlackjack:
 # Player actions
 # ---------------------------------------------------------------------------
 
+
 class TestPlayerBust:
     @pytest.mark.asyncio
     async def test_player_busts(self, env: WorkflowEnvironment):
@@ -118,7 +131,10 @@ class TestPlayerBust:
         )
         async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
             handle = await env.client.start_workflow(
-                BlackjackHandWorkflow.run, inp, id="bust-test", task_queue=TASK_QUEUE,
+                BlackjackHandWorkflow.run,
+                inp,
+                id="bust-test",
+                task_queue=TASK_QUEUE,
             )
             await handle.execute_update(
                 BlackjackHandWorkflow.player_action,
@@ -132,7 +148,7 @@ class TestPlayerBust:
 class TestDealerBust:
     @pytest.mark.asyncio
     async def test_dealer_busts(self, env: WorkflowEnvironment):
-        # Player: 10+8=18, stand. Dealer: 6+5=11, shoe: K(->21 no, 6+5+K=21), let's use 6+5, shoe: 9 -> 20, then K -> 30 bust
+        # Player: 10+8=18, stand.
         # Dealer: 6+5=11, draws 5->16, draws K->26 bust
         inp = make_input(
             bet=100,
@@ -142,7 +158,10 @@ class TestDealerBust:
         )
         async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
             handle = await env.client.start_workflow(
-                BlackjackHandWorkflow.run, inp, id="dealer-bust", task_queue=TASK_QUEUE,
+                BlackjackHandWorkflow.run,
+                inp,
+                id="dealer-bust",
+                task_queue=TASK_QUEUE,
             )
             await handle.execute_update(
                 BlackjackHandWorkflow.player_action,
@@ -164,7 +183,10 @@ class TestPlayerWins:
         )
         async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
             handle = await env.client.start_workflow(
-                BlackjackHandWorkflow.run, inp, id="player-wins", task_queue=TASK_QUEUE,
+                BlackjackHandWorkflow.run,
+                inp,
+                id="player-wins",
+                task_queue=TASK_QUEUE,
             )
             await handle.execute_update(
                 BlackjackHandWorkflow.player_action,
@@ -186,7 +208,10 @@ class TestPlayerLoses:
         )
         async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
             handle = await env.client.start_workflow(
-                BlackjackHandWorkflow.run, inp, id="player-loses", task_queue=TASK_QUEUE,
+                BlackjackHandWorkflow.run,
+                inp,
+                id="player-loses",
+                task_queue=TASK_QUEUE,
             )
             await handle.execute_update(
                 BlackjackHandWorkflow.player_action,
@@ -208,7 +233,10 @@ class TestPush:
         )
         async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
             handle = await env.client.start_workflow(
-                BlackjackHandWorkflow.run, inp, id="push-test", task_queue=TASK_QUEUE,
+                BlackjackHandWorkflow.run,
+                inp,
+                id="push-test",
+                task_queue=TASK_QUEUE,
             )
             await handle.execute_update(
                 BlackjackHandWorkflow.player_action,
@@ -231,7 +259,10 @@ class TestDoubleDown:
         )
         async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
             handle = await env.client.start_workflow(
-                BlackjackHandWorkflow.run, inp, id="double-test", task_queue=TASK_QUEUE,
+                BlackjackHandWorkflow.run,
+                inp,
+                id="double-test",
+                task_queue=TASK_QUEUE,
             )
             await handle.execute_update(
                 BlackjackHandWorkflow.player_action,
@@ -256,7 +287,10 @@ class TestSplit:
         )
         async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
             handle = await env.client.start_workflow(
-                BlackjackHandWorkflow.run, inp, id="split-test", task_queue=TASK_QUEUE,
+                BlackjackHandWorkflow.run,
+                inp,
+                id="split-test",
+                task_queue=TASK_QUEUE,
             )
             # Split
             await handle.execute_update(
@@ -290,7 +324,10 @@ class TestDealerStandsOn17:
         )
         async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
             handle = await env.client.start_workflow(
-                BlackjackHandWorkflow.run, inp, id="dealer-17", task_queue=TASK_QUEUE,
+                BlackjackHandWorkflow.run,
+                inp,
+                id="dealer-17",
+                task_queue=TASK_QUEUE,
             )
             await handle.execute_update(
                 BlackjackHandWorkflow.player_action,

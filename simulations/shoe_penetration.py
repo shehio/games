@@ -23,11 +23,11 @@ from shared.models import Action, Card, Rank, Suit, best_total, is_blackjack
 
 # Hard totals: rows 5-21, columns dealer 2-11
 _HARD = {
-    5:  "HHHHHHHHHH",
-    6:  "HHHHHHHHHH",
-    7:  "HHHHHHHHHH",
-    8:  "HHHHHHHHHH",
-    9:  "HHDDHHHHHH",
+    5: "HHHHHHHHHH",
+    6: "HHHHHHHHHH",
+    7: "HHHHHHHHHH",
+    8: "HHHHHHHHHH",
+    9: "HHDDHHHHHH",
     10: "DDDDDDDDHH",
     11: "DDDDDDDDDH",
     12: "HHSSHHHHHH",
@@ -56,14 +56,14 @@ _SOFT = {
 
 # Pair splits: row is the card value (2..11 where 11=A)
 _PAIR = {
-    2:  "PPHPPPHHHHH"[:10],  # trim to 10
-    3:  "PPHPPPHHHHH"[:10],
-    4:  "HHHHHHHHHH",
-    5:  "DDDDDDDDHH",
-    6:  "PPPPPHHHHH",
-    7:  "PPPPPPHHHH",
-    8:  "PPPPPPPPPP",
-    9:  "PPPPPSPPSS",
+    2: "PPHPPPHHHHH"[:10],  # trim to 10
+    3: "PPHPPPHHHHH"[:10],
+    4: "HHHHHHHHHH",
+    5: "DDDDDDDDHH",
+    6: "PPPPPHHHHH",
+    7: "PPPPPPHHHH",
+    8: "PPPPPPPPPP",
+    9: "PPPPPSPPSS",
     10: "SSSSSSSSSS",
     11: "PPPPPPPPPP",
 }
@@ -148,6 +148,7 @@ def basic_strategy_decision(
 # Shoe builder
 # ---------------------------------------------------------------------------
 
+
 def build_shoe(num_decks: int = 6) -> list[Card]:
     """Build and shuffle a shoe of the given number of decks."""
     shoe = [Card(rank=r, suit=s) for _ in range(num_decks) for s in Suit for r in Rank]
@@ -163,9 +164,9 @@ BET = 100  # fixed flat bet for simulation
 
 @dataclass
 class HandOutcome:
-    net: int          # net payout (positive = player won)
+    net: int  # net payout (positive = player won)
     is_blackjack: bool
-    cards_used: int   # how many cards were consumed from the shoe
+    cards_used: int  # how many cards were consumed from the shoe
     cards_dealt: list[Card] = field(default_factory=list)  # all cards dealt this hand
 
 
@@ -196,11 +197,20 @@ def simulate_hand(shoe: list[Card], bet: int = BET) -> HandOutcome:
 
     if player_bj or dealer_bj:
         if player_bj and dealer_bj:
-            return HandOutcome(net=0, is_blackjack=True, cards_used=start_len - len(shoe), cards_dealt=dealt)
+            return HandOutcome(
+                net=0, is_blackjack=True, cards_used=start_len - len(shoe), cards_dealt=dealt
+            )
         if player_bj:
-            return HandOutcome(net=int(bet * 1.5), is_blackjack=True, cards_used=start_len - len(shoe), cards_dealt=dealt)
+            return HandOutcome(
+                net=int(bet * 1.5),
+                is_blackjack=True,
+                cards_used=start_len - len(shoe),
+                cards_dealt=dealt,
+            )
         # dealer bj
-        return HandOutcome(net=-bet, is_blackjack=False, cards_used=start_len - len(shoe), cards_dealt=dealt)
+        return HandOutcome(
+            net=-bet, is_blackjack=False, cards_used=start_len - len(shoe), cards_dealt=dealt
+        )
 
     # Player hands (support single split)
     hands: list[tuple[list[Card], int]] = [(player_cards, bet)]

@@ -2,8 +2,8 @@ import random
 
 from temporalio import activity
 
-from shared.models import Card, Rank, Suit, card_to_dict
 from shared.constants import NUM_DECKS
+from shared.models import Card, Rank, Suit, card_to_dict
 
 
 @activity.defn

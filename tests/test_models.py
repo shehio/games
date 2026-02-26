@@ -5,9 +5,9 @@ import pytest
 from shared.models import (
     Card,
     HandResult,
+    HandResultInfo,
     HandSnapshot,
     HandState,
-    HandResultInfo,
     Rank,
     Suit,
     best_total,
@@ -22,10 +22,10 @@ from shared.models import (
     snapshot_to_dict,
 )
 
-
 # ---------------------------------------------------------------------------
 # Card.value()
 # ---------------------------------------------------------------------------
+
 
 class TestCardValue:
     def test_face_cards_return_10(self):
@@ -39,9 +39,15 @@ class TestCardValue:
 
     def test_numeric_cards(self):
         expected = {
-            Rank.TWO: [2], Rank.THREE: [3], Rank.FOUR: [4],
-            Rank.FIVE: [5], Rank.SIX: [6], Rank.SEVEN: [7],
-            Rank.EIGHT: [8], Rank.NINE: [9], Rank.TEN: [10],
+            Rank.TWO: [2],
+            Rank.THREE: [3],
+            Rank.FOUR: [4],
+            Rank.FIVE: [5],
+            Rank.SIX: [6],
+            Rank.SEVEN: [7],
+            Rank.EIGHT: [8],
+            Rank.NINE: [9],
+            Rank.TEN: [10],
         }
         for rank, val in expected.items():
             assert Card(rank=rank, suit=Suit.DIAMONDS).value() == val
@@ -54,6 +60,7 @@ class TestCardValue:
 # ---------------------------------------------------------------------------
 # best_total()
 # ---------------------------------------------------------------------------
+
 
 class TestBestTotal:
     def test_simple_hand(self):
@@ -104,6 +111,7 @@ class TestBestTotal:
 # is_blackjack()
 # ---------------------------------------------------------------------------
 
+
 class TestIsBlackjack:
     @pytest.mark.parametrize("face_rank", [Rank.TEN, Rank.JACK, Rank.QUEEN, Rank.KING])
     def test_natural_blackjack(self, face_rank):
@@ -127,6 +135,7 @@ class TestIsBlackjack:
 # ---------------------------------------------------------------------------
 # Serialization round-trips
 # ---------------------------------------------------------------------------
+
 
 class TestSerialization:
     def test_card_round_trip(self):
@@ -179,7 +188,15 @@ class TestSerialization:
             net_payout=150,
             result_description="Blackjack! You win!",
             final_snapshot=HandSnapshot(
-                player_hands=[HandState(cards=[Card(Rank.ACE, Suit.HEARTS), Card(Rank.KING, Suit.SPADES)], bet=100, result=HandResult.BLACKJACK, payout=250, is_done=True)],
+                player_hands=[
+                    HandState(
+                        cards=[Card(Rank.ACE, Suit.HEARTS), Card(Rank.KING, Suit.SPADES)],
+                        bet=100,
+                        result=HandResult.BLACKJACK,
+                        payout=250,
+                        is_done=True,
+                    )
+                ],
                 dealer_cards=[Card(Rank.SEVEN, Suit.CLUBS), Card(Rank.NINE, Suit.DIAMONDS)],
                 dealer_hidden=False,
                 hand_over=True,

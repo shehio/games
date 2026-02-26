@@ -1,7 +1,5 @@
 """Tests for card counting systems."""
 
-import pytest
-
 from shared.models import Card, Rank, Suit
 from simulations.card_counting import (
     HiLoCounter,
@@ -28,9 +26,9 @@ class TestHiLo:
 
     def test_running_count_accumulates(self):
         counter = HiLoCounter()
-        counter.observe(Card(Rank.TWO, Suit.SPADES))   # +1
-        counter.observe(Card(Rank.FIVE, Suit.HEARTS))   # +1
-        counter.observe(Card(Rank.ACE, Suit.CLUBS))     # -1
+        counter.observe(Card(Rank.TWO, Suit.SPADES))  # +1
+        counter.observe(Card(Rank.FIVE, Suit.HEARTS))  # +1
+        counter.observe(Card(Rank.ACE, Suit.CLUBS))  # -1
         assert counter.running_count == 1
 
     def test_true_count_divides_by_decks_remaining(self):
@@ -62,11 +60,19 @@ class TestOmegaII:
     def test_card_values(self):
         counter = OmegaIICounter()
         cases = [
-            (Rank.TWO, 1), (Rank.THREE, 1), (Rank.SEVEN, 1),
-            (Rank.FOUR, 2), (Rank.FIVE, 2), (Rank.SIX, 2),
-            (Rank.EIGHT, 0), (Rank.ACE, 0),
+            (Rank.TWO, 1),
+            (Rank.THREE, 1),
+            (Rank.SEVEN, 1),
+            (Rank.FOUR, 2),
+            (Rank.FIVE, 2),
+            (Rank.SIX, 2),
+            (Rank.EIGHT, 0),
+            (Rank.ACE, 0),
             (Rank.NINE, -1),
-            (Rank.TEN, -2), (Rank.JACK, -2), (Rank.QUEEN, -2), (Rank.KING, -2),
+            (Rank.TEN, -2),
+            (Rank.JACK, -2),
+            (Rank.QUEEN, -2),
+            (Rank.KING, -2),
         ]
         for rank, expected in cases:
             assert counter.card_value(Card(rank, Suit.HEARTS)) == expected, (
@@ -75,9 +81,9 @@ class TestOmegaII:
 
     def test_running_count_accumulates(self):
         counter = OmegaIICounter()
-        counter.observe(Card(Rank.FIVE, Suit.SPADES))   # +2
-        counter.observe(Card(Rank.KING, Suit.HEARTS))    # -2
-        counter.observe(Card(Rank.THREE, Suit.CLUBS))    # +1
+        counter.observe(Card(Rank.FIVE, Suit.SPADES))  # +2
+        counter.observe(Card(Rank.KING, Suit.HEARTS))  # -2
+        counter.observe(Card(Rank.THREE, Suit.CLUBS))  # +1
         assert counter.running_count == 1
 
     def test_balanced_full_shoe(self):

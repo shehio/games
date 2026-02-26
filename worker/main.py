@@ -6,8 +6,8 @@ from temporalio.worker import Worker
 
 from shared.constants import TASK_QUEUE
 from worker.activities.deck import shuffle_deck
-from worker.workflows.blackjack_session import BlackjackSessionWorkflow
 from worker.workflows.blackjack_hand import BlackjackHandWorkflow
+from worker.workflows.blackjack_session import BlackjackSessionWorkflow
 
 
 async def main():

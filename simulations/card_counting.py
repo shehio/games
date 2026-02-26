@@ -53,10 +53,18 @@ class HiLoCounter(CardCounter):
     """
 
     _VALUES = {
-        Rank.TWO: 1, Rank.THREE: 1, Rank.FOUR: 1,
-        Rank.FIVE: 1, Rank.SIX: 1,
-        Rank.SEVEN: 0, Rank.EIGHT: 0, Rank.NINE: 0,
-        Rank.TEN: -1, Rank.JACK: -1, Rank.QUEEN: -1, Rank.KING: -1,
+        Rank.TWO: 1,
+        Rank.THREE: 1,
+        Rank.FOUR: 1,
+        Rank.FIVE: 1,
+        Rank.SIX: 1,
+        Rank.SEVEN: 0,
+        Rank.EIGHT: 0,
+        Rank.NINE: 0,
+        Rank.TEN: -1,
+        Rank.JACK: -1,
+        Rank.QUEEN: -1,
+        Rank.KING: -1,
         Rank.ACE: -1,
     }
 
@@ -71,12 +79,18 @@ class OmegaIICounter(CardCounter):
     """
 
     _VALUES = {
-        Rank.TWO: 1, Rank.THREE: 1,
-        Rank.FOUR: 2, Rank.FIVE: 2, Rank.SIX: 2,
+        Rank.TWO: 1,
+        Rank.THREE: 1,
+        Rank.FOUR: 2,
+        Rank.FIVE: 2,
+        Rank.SIX: 2,
         Rank.SEVEN: 1,
         Rank.EIGHT: 0,
         Rank.NINE: -1,
-        Rank.TEN: -2, Rank.JACK: -2, Rank.QUEEN: -2, Rank.KING: -2,
+        Rank.TEN: -2,
+        Rank.JACK: -2,
+        Rank.QUEEN: -2,
+        Rank.KING: -2,
         Rank.ACE: 0,
     }
 
@@ -92,10 +106,18 @@ class KOCounter(CardCounter):
     """
 
     _VALUES = {
-        Rank.TWO: 1, Rank.THREE: 1, Rank.FOUR: 1,
-        Rank.FIVE: 1, Rank.SIX: 1, Rank.SEVEN: 1,
-        Rank.EIGHT: 0, Rank.NINE: 0,
-        Rank.TEN: -1, Rank.JACK: -1, Rank.QUEEN: -1, Rank.KING: -1,
+        Rank.TWO: 1,
+        Rank.THREE: 1,
+        Rank.FOUR: 1,
+        Rank.FIVE: 1,
+        Rank.SIX: 1,
+        Rank.SEVEN: 1,
+        Rank.EIGHT: 0,
+        Rank.NINE: 0,
+        Rank.TEN: -1,
+        Rank.JACK: -1,
+        Rank.QUEEN: -1,
+        Rank.KING: -1,
         Rank.ACE: -1,
     }
 
