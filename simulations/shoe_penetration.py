@@ -8,7 +8,7 @@ shoe, and blackjack frequency.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from shared.models import Action, Card, Rank, Suit, best_total, is_blackjack
 
@@ -166,9 +166,10 @@ class HandOutcome:
     net: int          # net payout (positive = player won)
     is_blackjack: bool
     cards_used: int   # how many cards were consumed from the shoe
+    cards_dealt: list[Card] = field(default_factory=list)  # all cards dealt this hand
 
 
-def simulate_hand(shoe: list[Card]) -> HandOutcome:
+def simulate_hand(shoe: list[Card], bet: int = BET) -> HandOutcome:
     """Simulate one hand of blackjack using basic strategy. Returns outcome.
 
     Draws cards from the front of `shoe` (mutates it in place).
@@ -178,8 +179,12 @@ def simulate_hand(shoe: list[Card]) -> HandOutcome:
         # Not enough cards to play a hand
         return HandOutcome(net=0, is_blackjack=False, cards_used=0)
 
+    dealt: list[Card] = []
+
     def draw() -> Card:
-        return shoe.pop(0)
+        card = shoe.pop(0)
+        dealt.append(card)
+        return card
 
     # Deal
     player_cards = [draw(), draw()]
@@ -191,19 +196,19 @@ def simulate_hand(shoe: list[Card]) -> HandOutcome:
 
     if player_bj or dealer_bj:
         if player_bj and dealer_bj:
-            return HandOutcome(net=0, is_blackjack=True, cards_used=start_len - len(shoe))
+            return HandOutcome(net=0, is_blackjack=True, cards_used=start_len - len(shoe), cards_dealt=dealt)
         if player_bj:
-            return HandOutcome(net=int(BET * 1.5), is_blackjack=True, cards_used=start_len - len(shoe))
+            return HandOutcome(net=int(bet * 1.5), is_blackjack=True, cards_used=start_len - len(shoe), cards_dealt=dealt)
         # dealer bj
-        return HandOutcome(net=-BET, is_blackjack=False, cards_used=start_len - len(shoe))
+        return HandOutcome(net=-bet, is_blackjack=False, cards_used=start_len - len(shoe), cards_dealt=dealt)
 
     # Player hands (support single split)
-    hands: list[tuple[list[Card], int]] = [(player_cards, BET)]
-    final_hands: list[tuple[list[Card], int, bool]] = []  # cards, bet, busted
+    hands: list[tuple[list[Card], int]] = [(player_cards, bet)]
+    final_hands: list[tuple[list[Card], int, bool]] = []  # cards, hand_bet, busted
 
     i = 0
     while i < len(hands):
-        cards, bet = hands[i]
+        cards, hand_bet = hands[i]
         can_split = (
             len(cards) == 2
             and len(hands) == 1
@@ -224,17 +229,17 @@ def simulate_hand(shoe: list[Card]) -> HandOutcome:
                 c1, c2 = cards
                 hand1 = [c1, draw()]
                 hand2 = [c2, draw()]
-                hands[i] = (hand1, BET)
-                hands.append((hand2, BET))
-                cards, bet = hands[i]
+                hands[i] = (hand1, bet)
+                hands.append((hand2, bet))
+                cards, hand_bet = hands[i]
                 can_split = False
                 can_double = len(cards) == 2
                 continue
 
             if action == Action.DOUBLE:
                 cards.append(draw())
-                bet *= 2
-                hands[i] = (cards, bet)
+                hand_bet *= 2
+                hands[i] = (cards, hand_bet)
                 break
 
             if action == Action.HIT:
@@ -244,7 +249,7 @@ def simulate_hand(shoe: list[Card]) -> HandOutcome:
                 if best_total(cards) > 21:
                     break
 
-        final_hands.append((cards, bet, best_total(cards) > 21))
+        final_hands.append((cards, hand_bet, best_total(cards) > 21))
         i += 1
 
     # Dealer plays (only if not all player hands busted)
@@ -258,21 +263,21 @@ def simulate_hand(shoe: list[Card]) -> HandOutcome:
 
     # Resolve
     total_net = 0
-    for cards, bet, busted in final_hands:
+    for cards, hand_bet, busted in final_hands:
         if busted:
-            total_net -= bet
+            total_net -= hand_bet
         elif dealer_bust:
-            total_net += bet
+            total_net += hand_bet
         else:
             pt = best_total(cards)
             if pt > dealer_total:
-                total_net += bet
+                total_net += hand_bet
             elif pt < dealer_total:
-                total_net -= bet
+                total_net -= hand_bet
             # else push: net 0
 
     cards_used = start_len - len(shoe)
-    return HandOutcome(net=total_net, is_blackjack=False, cards_used=cards_used)
+    return HandOutcome(net=total_net, is_blackjack=False, cards_used=cards_used, cards_dealt=dealt)
 
 
 def run_simulation(
