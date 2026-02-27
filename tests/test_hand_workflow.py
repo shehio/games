@@ -92,24 +92,48 @@ class TestNaturalBlackjack:
         assert "Blackjack" in result["result_description"]
 
     @pytest.mark.asyncio
-    async def test_dealer_blackjack(self, run_hand):
+    async def test_dealer_blackjack(self, env: WorkflowEnvironment):
         inp = make_input(
             bet=100,
             player=[c(Rank.TEN), c(Rank.NINE)],
             dealer=[c(Rank.ACE), c(Rank.TEN)],
         )
-        result = await run_hand(inp)
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="dealer-bj",
+                task_queue=TASK_QUEUE,
+            )
+            # Dealer shows Ace → decline insurance
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": False},
+            )
+            result = await handle.result()
         assert result["net_payout"] == -100
         assert "Dealer" in result["result_description"]
 
     @pytest.mark.asyncio
-    async def test_both_blackjack_push(self, run_hand):
+    async def test_both_blackjack_push(self, env: WorkflowEnvironment):
         inp = make_input(
             bet=100,
             player=[c(Rank.ACE), c(Rank.KING)],
             dealer=[c(Rank.ACE), c(Rank.QUEEN)],
         )
-        result = await run_hand(inp)
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="both-bj-push",
+                task_queue=TASK_QUEUE,
+            )
+            # Dealer shows Ace → decline insurance
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": False},
+            )
+            result = await handle.result()
         assert result["net_payout"] == 0
         assert "Push" in result["result_description"]
 

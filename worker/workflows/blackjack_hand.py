@@ -8,6 +8,7 @@ with workflow.unsafe.imports_passed_through():
         HandSnapshot,
         HandState,
         PlayerActionInput,
+        Rank,
         best_total,
         card_from_dict,
         card_to_dict,
@@ -167,22 +168,64 @@ class BlackjackHandWorkflow:
         self.insurance_resolved = True
         return snapshot_to_dict(self._build_snapshot())
 
+    def _make_result(self, desc: str, insurance_result: str = "") -> dict:
+        """Build the standard return dict for the hand workflow."""
+        total_bet = sum(h.bet for h in self.player_hands)
+        total_payout = sum(h.payout for h in self.player_hands)
+        hand_net = total_payout - total_bet
+        insurance_net = self.insurance_payout - self.insurance_bet
+        net = hand_net + insurance_net
+        return {
+            "net_payout": net,
+            "result_description": desc,
+            "final_snapshot": snapshot_to_dict(
+                self._build_snapshot(desc, insurance_result=insurance_result)
+            ),
+            "remaining_shoe": [card_to_dict(c) for c in self.shoe],
+            "insurance_bet": self.insurance_bet,
+            "insurance_payout": self.insurance_payout,
+        }
+
     @workflow.run
     async def run(self, input_data: dict) -> dict:
         """Run one hand of blackjack.
 
-        input_data keys: bet, shoe, dealer_cards, player_cards (all card dicts).
-        Returns: net_payout, result_description, final_snapshot, remaining_shoe.
+        input_data keys: bet, shoe, dealer_cards, player_cards,
+                         available_bankroll (all card dicts).
+        Returns: net_payout, result_description, final_snapshot,
+                 remaining_shoe, insurance_bet, insurance_payout.
         """
         self.bet = input_data["bet"]
         self.shoe = [card_from_dict(c) for c in input_data["shoe"]]
         self.dealer_cards = [card_from_dict(c) for c in input_data["dealer_cards"]]
         player_cards = [card_from_dict(c) for c in input_data["player_cards"]]
+        self.available_bankroll = input_data.get("available_bankroll", 0)
 
         self.player_hands = [HandState(cards=player_cards, bet=self.bet)]
 
-        # Check for natural blackjack
-        if is_blackjack(player_cards):
+        # --- Insurance phase ---
+        dealer_shows_ace = self.dealer_cards[0].rank == Rank.ACE
+        player_has_bj = is_blackjack(player_cards)
+
+        if dealer_shows_ace:
+            self.insurance_offered = True
+            await workflow.wait_condition(lambda: self.insurance_resolved)
+
+            # Even money: player has BJ and took insurance → guaranteed 1:1
+            if player_has_bj and self.insurance_bet > 0:
+                self.player_hands[0].result = HandResult.WIN
+                self.player_hands[0].payout = self.bet * 2  # return bet + 1:1
+                self.player_hands[0].is_done = True
+                self.hand_over = True
+                # Insurance side bet: if dealer has BJ, insurance pays 2:1
+                # If not, insurance is lost. But even money guarantees net = bet.
+                # We zero out insurance since even money is a flat 1:1 guarantee.
+                self.insurance_payout = self.insurance_bet  # refund, net insurance = 0
+                desc = "Even Money! Guaranteed 1:1 payout."
+                return self._make_result(desc, insurance_result="Even money taken.")
+
+        # --- Natural blackjack (no insurance, or insurance declined) ---
+        if player_has_bj:
             if is_blackjack(self.dealer_cards):
                 self.player_hands[0].result = HandResult.PUSH
                 self.player_hands[0].payout = self.bet
@@ -196,27 +239,40 @@ class BlackjackHandWorkflow:
                 self.hand_over = True
                 desc = "Blackjack! You win!"
 
-            return {
-                "net_payout": sum(h.payout for h in self.player_hands)
-                - sum(h.bet for h in self.player_hands),
-                "result_description": desc,
-                "final_snapshot": snapshot_to_dict(self._build_snapshot(desc)),
-                "remaining_shoe": [card_to_dict(c) for c in self.shoe],
-            }
+            # Insurance lost if taken (dealer doesn't have BJ for BJ payout here,
+            # except in push case where dealer does have BJ)
+            ins_result = ""
+            if self.insurance_bet > 0:
+                if is_blackjack(self.dealer_cards):
+                    self.insurance_payout = self.insurance_bet * 3  # 2:1 + original
+                    ins_result = f"Insurance wins! +${self.insurance_payout - self.insurance_bet}"
+                else:
+                    self.insurance_payout = 0
+                    ins_result = f"Insurance lost. -${self.insurance_bet}"
+            return self._make_result(desc, insurance_result=ins_result)
 
-        # Check dealer blackjack
+        # --- Dealer blackjack (player doesn't have BJ) ---
         if is_blackjack(self.dealer_cards):
             self.player_hands[0].result = HandResult.LOSE
             self.player_hands[0].payout = 0
             self.player_hands[0].is_done = True
             self.hand_over = True
-            desc = "Dealer has Blackjack. You lose."
-            return {
-                "net_payout": -self.bet,
-                "result_description": desc,
-                "final_snapshot": snapshot_to_dict(self._build_snapshot(desc)),
-                "remaining_shoe": [card_to_dict(c) for c in self.shoe],
-            }
+
+            ins_result = ""
+            if self.insurance_bet > 0:
+                self.insurance_payout = self.insurance_bet * 3
+                ins_result = f"Insurance wins! +${self.insurance_payout - self.insurance_bet}"
+                desc = "Dealer has Blackjack. Insurance pays 2:1!"
+            else:
+                desc = "Dealer has Blackjack. You lose."
+            return self._make_result(desc, insurance_result=ins_result)
+
+        # --- Normal play (no blackjacks) ---
+        # Insurance is lost if taken (dealer doesn't have BJ)
+        ins_result = ""
+        if self.insurance_bet > 0:
+            self.insurance_payout = 0
+            ins_result = f"Insurance lost. -${self.insurance_bet}"
 
         # Wait for player to finish all hands
         await workflow.wait_condition(lambda: all(h.is_done for h in self.player_hands))
@@ -258,14 +314,5 @@ class BlackjackHandWorkflow:
                 hand.payout = hand.bet
                 descriptions.append(f"{prefix}Push. {player_total} vs {dealer_total}")
 
-        total_bet = sum(h.bet for h in self.player_hands)
-        total_payout = sum(h.payout for h in self.player_hands)
-        net = total_payout - total_bet
         desc = " | ".join(descriptions)
-
-        return {
-            "net_payout": net,
-            "result_description": desc,
-            "final_snapshot": snapshot_to_dict(self._build_snapshot(desc)),
-            "remaining_shoe": [card_to_dict(c) for c in self.shoe],
-        }
+        return self._make_result(desc, insurance_result=ins_result)
