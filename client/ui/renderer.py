@@ -91,6 +91,11 @@ def render_snapshot(snap_dict: dict, bankroll: int = 0) -> None:
 
     print(LINE)
 
+    if snap.insurance_offered:
+        print("  ** INSURANCE AVAILABLE **")
+    if snap.insurance_result:
+        print(f"  {snap.insurance_result}")
+
     if snap.message:
         print(f"  {snap.message}")
         print(LINE)

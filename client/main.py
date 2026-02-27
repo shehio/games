@@ -6,7 +6,7 @@ import uuid
 
 from temporalio.client import Client
 
-from client.ui.prompts import confirm_cash_out, prompt_action, prompt_bet
+from client.ui.prompts import confirm_cash_out, prompt_action, prompt_bet, prompt_insurance
 from client.ui.renderer import (
     LINE,
     render_error,
@@ -124,6 +124,36 @@ async def main():
                 render_snapshot(snap)
             except Exception as e:
                 print(f"  (Could not load initial deal: {e})")
+
+            # Handle insurance phase
+            try:
+                insurance_offered = await hand_handle.query(
+                    BlackjackHandWorkflow.is_insurance_offered
+                )
+                if insurance_offered:
+                    state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+                    max_insurance = min(bet // 2, state["bankroll"])
+                    player_has_bj = (
+                        snap
+                        and snap.get("player_hands")
+                        and len(snap["player_hands"]) == 1
+                        and len(snap["player_hands"][0]["cards"]) == 2
+                    )
+                    # Check if it's a blackjack for even money
+                    is_even_money = False
+                    if player_has_bj:
+                        from shared.models import card_from_dict, is_blackjack
+
+                        p_cards = [card_from_dict(c) for c in snap["player_hands"][0]["cards"]]
+                        is_even_money = is_blackjack(p_cards)
+
+                    take, amount = prompt_insurance(bet, max_insurance, is_even_money)
+                    await hand_handle.execute_update(
+                        BlackjackHandWorkflow.insurance_action,
+                        {"take": take, "amount": amount},
+                    )
+            except Exception as e:
+                print(f"  (Insurance handling error: {e})")
 
             # Check if hand needs player input
             try:
