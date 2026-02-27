@@ -362,3 +362,254 @@ class TestDealerStandsOn17:
         assert result["net_payout"] == 100
         # Shoe should still have the ace (dealer didn't draw)
         assert len(result["remaining_shoe"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Insurance scenarios
+# ---------------------------------------------------------------------------
+
+
+class TestInsurance:
+    @pytest.mark.asyncio
+    async def test_insurance_offered_when_dealer_shows_ace(self, env: WorkflowEnvironment):
+        """Insurance should be offered when dealer's face-up card is Ace."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.NINE)],
+            dealer=[c(Rank.ACE), c(Rank.SEVEN)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="ins-offered",
+                task_queue=TASK_QUEUE,
+            )
+            offered = await handle.query(BlackjackHandWorkflow.is_insurance_offered)
+            assert offered is True
+            # Decline insurance and finish the hand
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": False},
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            await handle.result()
+
+    @pytest.mark.asyncio
+    async def test_insurance_not_offered_when_dealer_shows_non_ace(self, env: WorkflowEnvironment):
+        """Insurance should NOT be offered when dealer shows a non-Ace."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.NINE)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.SEVEN)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="ins-not-offered",
+                task_queue=TASK_QUEUE,
+            )
+            offered = await handle.query(BlackjackHandWorkflow.is_insurance_offered)
+            assert offered is False
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            result = await handle.result()
+        assert result.get("insurance_bet", 0) == 0
+
+    @pytest.mark.asyncio
+    async def test_insurance_taken_dealer_has_bj_breakeven(self, env: WorkflowEnvironment):
+        """Take insurance, dealer has BJ → insurance pays 2:1, hand loses → net ~0."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.NINE)],
+            dealer=[c(Rank.ACE), c(Rank.TEN)],
+            shoe=[c(Rank.TWO)],
+        )
+        inp["available_bankroll"] = 500
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="ins-taken-dbj",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": True, "amount": 50},
+            )
+            result = await handle.result()
+        # Hand loses: -100. Insurance wins: 50*3 - 50 = +100. Net = 0.
+        assert result["net_payout"] == 0
+        assert result["insurance_bet"] == 50
+        assert result["insurance_payout"] == 150
+
+    @pytest.mark.asyncio
+    async def test_insurance_taken_dealer_no_bj_play_continues(self, env: WorkflowEnvironment):
+        """Take insurance, dealer has no BJ → insurance lost, normal play continues."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.NINE)],
+            dealer=[c(Rank.ACE), c(Rank.SEVEN)],
+            shoe=[c(Rank.TWO)],
+        )
+        inp["available_bankroll"] = 500
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="ins-taken-no-dbj",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": True, "amount": 50},
+            )
+            # Player stands with 19, dealer has A+7=18 (soft 18, stands at 18)
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            result = await handle.result()
+        # Hand wins: +100. Insurance lost: -50. Net = +50.
+        assert result["net_payout"] == 50
+        assert result["insurance_bet"] == 50
+        assert result["insurance_payout"] == 0
+
+    @pytest.mark.asyncio
+    async def test_insurance_declined_dealer_has_bj(self, env: WorkflowEnvironment):
+        """Decline insurance, dealer has BJ → full loss."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.NINE)],
+            dealer=[c(Rank.ACE), c(Rank.TEN)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="ins-declined-dbj",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": False},
+            )
+            result = await handle.result()
+        assert result["net_payout"] == -100
+        assert result["insurance_bet"] == 0
+
+    @pytest.mark.asyncio
+    async def test_even_money_player_bj_takes_insurance(self, env: WorkflowEnvironment):
+        """Player BJ + takes insurance → even money, guaranteed 1:1 payout."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.ACE), c(Rank.KING)],
+            dealer=[c(Rank.ACE), c(Rank.TEN)],
+        )
+        inp["available_bankroll"] = 500
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="even-money",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": True, "amount": 50},
+            )
+            result = await handle.result()
+        # Even money: net = bet = 100 (hand pays 2x bet = 200, - bet = +100,
+        # insurance refunded so insurance_net = 0)
+        assert result["net_payout"] == 100
+        assert "Even Money" in result["result_description"]
+
+    @pytest.mark.asyncio
+    async def test_player_bj_declines_insurance_dealer_bj_push(self, env: WorkflowEnvironment):
+        """Player BJ + declines insurance + dealer BJ → push."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.ACE), c(Rank.KING)],
+            dealer=[c(Rank.ACE), c(Rank.QUEEN)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="bj-decline-push",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": False},
+            )
+            result = await handle.result()
+        assert result["net_payout"] == 0
+        assert "Push" in result["result_description"]
+
+    @pytest.mark.asyncio
+    async def test_player_bj_declines_insurance_dealer_no_bj(self, env: WorkflowEnvironment):
+        """Player BJ + declines insurance + dealer no BJ → 3:2 payout."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.ACE), c(Rank.KING)],
+            dealer=[c(Rank.ACE), c(Rank.SEVEN)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="bj-decline-no-dbj",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": False},
+            )
+            result = await handle.result()
+        # Player BJ pays 3:2 = 150
+        assert result["net_payout"] == 150
+        assert "Blackjack" in result["result_description"]
+
+    @pytest.mark.asyncio
+    async def test_insurance_bet_validation(self, env: WorkflowEnvironment):
+        """Insurance amount > bet//2 should be rejected."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.TEN), c(Rank.NINE)],
+            dealer=[c(Rank.ACE), c(Rank.SEVEN)],
+        )
+        inp["available_bankroll"] = 500
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="ins-validation",
+                task_queue=TASK_QUEUE,
+            )
+            # Try to bet more than half the original bet
+            snap = await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": True, "amount": 60},  # max is 50 (100//2)
+            )
+            # Should still be waiting for valid insurance
+            assert snap.get("insurance_offered") is True
+            offered = await handle.query(BlackjackHandWorkflow.is_insurance_offered)
+            assert offered is True
+            # Now send valid amount
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": True, "amount": 50},
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            result = await handle.result()
+        assert result["insurance_bet"] == 50
