@@ -77,6 +77,7 @@ class HandState:
     is_doubled: bool = False
     result: HandResult | None = None
     payout: int = 0
+    insurance_bet: int = 0
 
     def display_cards(self) -> str:
         return " ".join(str(c) for c in self.cards)
@@ -152,6 +153,7 @@ def hand_state_to_dict(hs: HandState) -> dict:
         "is_doubled": hs.is_doubled,
         "result": hs.result.value if hs.result else None,
         "payout": hs.payout,
+        "insurance_bet": hs.insurance_bet,
     }
 
 
@@ -163,6 +165,7 @@ def hand_state_from_dict(d: dict) -> HandState:
         is_doubled=d["is_doubled"],
         result=HandResult(d["result"]) if d["result"] else None,
         payout=d["payout"],
+        insurance_bet=d.get("insurance_bet", 0),
     )
 
 
