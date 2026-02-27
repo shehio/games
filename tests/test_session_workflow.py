@@ -49,6 +49,19 @@ async def complete_hand(client, session_handle, timeout: float = 10.0):
 
     hand_handle = client.get_workflow_handle(hand_wf_id)
 
+    # Handle insurance if offered (decline by default)
+    for _ in range(10):
+        try:
+            offered = await hand_handle.query(BlackjackHandWorkflow.is_insurance_offered)
+            if offered:
+                await hand_handle.execute_update(
+                    BlackjackHandWorkflow.insurance_action,
+                    {"take": False},
+                )
+            break
+        except Exception:
+            await asyncio.sleep(0.05)
+
     # Send stand to complete the hand (if it hasn't already resolved)
     for _ in range(50):
         state = await session_handle.query(BlackjackSessionWorkflow.get_session_state)
@@ -238,6 +251,80 @@ class TestStatsTracking:
             await handle.signal(BlackjackSessionWorkflow.cash_out)
             summary = await handle.result()
             assert summary["bankroll_high"] >= STARTING_BANKROLL
+
+
+# ---------------------------------------------------------------------------
+# Bankruptcy
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Insurance wagering
+# ---------------------------------------------------------------------------
+
+
+class TestInsuranceWagering:
+    @pytest.mark.asyncio
+    async def test_total_wagered_includes_all_bets(self, env: WorkflowEnvironment, worker_args):
+        """After hands, total_wagered >= sum of all bets placed (main + insurance)."""
+        async with Worker(env.client, **worker_args):
+            handle = await env.client.start_workflow(
+                BlackjackSessionWorkflow.run,
+                id="ins-wager",
+                task_queue=TASK_QUEUE,
+            )
+
+            # Play a few hands, standing immediately
+            for _ in range(3):
+                state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+                if state["session_over"] or state["bankroll"] < MIN_BET:
+                    break
+                if state["waiting_for_bet"]:
+                    r = await handle.execute_update(
+                        BlackjackSessionWorkflow.place_bet,
+                        {"amount": MIN_BET},
+                    )
+                    if not r["ok"]:
+                        break
+                    await complete_hand(env.client, handle)
+
+            state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+            # total_wagered should be at least (hands_played * MIN_BET)
+            assert state["total_wagered"] >= state["hands_played"] * MIN_BET
+
+            await handle.signal(BlackjackSessionWorkflow.cash_out)
+            summary = await handle.result()
+            assert summary["total_wagered"] >= summary["hands_played"] * MIN_BET
+
+    @pytest.mark.asyncio
+    async def test_bankroll_consistency(self, env: WorkflowEnvironment, worker_args):
+        """Bankroll should equal STARTING_BANKROLL + net_winnings."""
+        async with Worker(env.client, **worker_args):
+            handle = await env.client.start_workflow(
+                BlackjackSessionWorkflow.run,
+                id="bankroll-cons",
+                task_queue=TASK_QUEUE,
+            )
+
+            for _ in range(3):
+                state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+                if state["session_over"] or state["bankroll"] < MIN_BET:
+                    break
+                if state["waiting_for_bet"]:
+                    r = await handle.execute_update(
+                        BlackjackSessionWorkflow.place_bet,
+                        {"amount": MIN_BET},
+                    )
+                    if not r["ok"]:
+                        break
+                    await complete_hand(env.client, handle)
+
+            state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+            assert state["bankroll"] == STARTING_BANKROLL + state["net_winnings"]
+
+            await handle.signal(BlackjackSessionWorkflow.cash_out)
+            summary = await handle.result()
+            assert summary["final_bankroll"] == STARTING_BANKROLL + summary["net_winnings"]
 
 
 # ---------------------------------------------------------------------------
