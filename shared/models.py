@@ -90,6 +90,8 @@ class HandSnapshot:
     dealer_hidden: bool = True
     hand_over: bool = False
     message: str = ""
+    insurance_offered: bool = False
+    insurance_result: str = ""
 
 
 @dataclass
@@ -176,6 +178,8 @@ def snapshot_to_dict(snap: HandSnapshot) -> dict:
         "dealer_hidden": snap.dealer_hidden,
         "hand_over": snap.hand_over,
         "message": snap.message,
+        "insurance_offered": snap.insurance_offered,
+        "insurance_result": snap.insurance_result,
     }
 
 
@@ -186,6 +190,8 @@ def snapshot_from_dict(d: dict) -> HandSnapshot:
         dealer_hidden=d["dealer_hidden"],
         hand_over=d["hand_over"],
         message=d["message"],
+        insurance_offered=d.get("insurance_offered", False),
+        insurance_result=d.get("insurance_result", ""),
     )
 
 
