@@ -53,7 +53,12 @@ def render_hand_str(cards: list[Card], hidden: bool = False) -> str:
     return "\n".join(lines)
 
 
-def render_snapshot(snap_dict: dict, bankroll: int = 0) -> None:
+def render_snapshot(
+    snap_dict: dict,
+    bankroll: int = 0,
+    running_count: int = 0,
+    true_count: float = 0.0,
+) -> None:
     snap = snapshot_from_dict(snap_dict)
     print()
     print(LINE)
@@ -88,6 +93,11 @@ def render_snapshot(snap_dict: dict, bankroll: int = 0) -> None:
             print(line)
 
         print(f"  Value: {total}  |  Bet: ${hand.bet}")
+
+    if running_count != 0 or true_count != 0.0:
+        rc_sign = "+" if running_count >= 0 else ""
+        tc_sign = "+" if true_count >= 0 else ""
+        print(f"  Count: RC {rc_sign}{running_count} | TC {tc_sign}{true_count:.1f}")
 
     print(LINE)
 
@@ -149,12 +159,15 @@ def render_result(hand_result: dict) -> None:
     print(LINE)
 
 
-def render_stats_bar(state: dict) -> None:
+def render_stats_bar(state: dict, running_count: int = 0, true_count: float = 0.0) -> None:
     """Show running stats between hands."""
     print()
     print(DOUBLE_LINE)
     print(f"  Bankroll: ${state['bankroll']}")
     print(f"  Hands played: {state['hands_played']}")
+    rc_sign = "+" if running_count >= 0 else ""
+    tc_sign = "+" if true_count >= 0 else ""
+    print(f"  Count: RC {rc_sign}{running_count} | TC {tc_sign}{true_count:.1f}")
     print(DOUBLE_LINE)
     print()
 
