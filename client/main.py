@@ -6,6 +6,7 @@ import uuid
 
 from temporalio.client import Client
 
+from client.card_tracker import CardTracker
 from client.ui.prompts import confirm_cash_out, prompt_action, prompt_bet, prompt_insurance
 from client.ui.renderer import (
     LINE,
@@ -75,9 +76,18 @@ async def main():
     print(f"  Session: {session_id}")
     print()
 
+    tracker = CardTracker()
+    prev_shoe_remaining = 0
+
     try:
         while True:
             state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+
+            # Detect shoe reshuffle: if cards remaining increased, shoe was reset
+            shoe_remaining = state.get("shoe_cards_remaining", 0)
+            if shoe_remaining > prev_shoe_remaining and prev_shoe_remaining > 0:
+                tracker.reset()
+            prev_shoe_remaining = shoe_remaining
 
             if state["session_over"]:
                 print("  Session over!")
@@ -87,7 +97,7 @@ async def main():
                 print("  You're broke! Game over.")
                 break
 
-            render_stats_bar(state)
+            render_stats_bar(state, tracker.running_count, tracker.true_count)
 
             bet = prompt_bet(state["bankroll"], MIN_BET)
             if bet is None:
@@ -113,6 +123,7 @@ async def main():
                 # Hand already completed (blackjack / dealer blackjack)
                 last = await handle.query(BlackjackSessionWorkflow.get_last_hand_result)
                 if last:
+                    tracker.observe_result(last)
                     render_result(last)
                 continue
 
@@ -121,7 +132,10 @@ async def main():
             # Show initial deal
             try:
                 snap = await hand_handle.query(BlackjackHandWorkflow.get_snapshot)
-                render_snapshot(snap)
+                tracker.observe_snapshot(snap)
+                render_snapshot(
+                    snap, running_count=tracker.running_count, true_count=tracker.true_count
+                )
             except Exception as e:
                 print(f"  (Could not load initial deal: {e})")
 
@@ -167,6 +181,7 @@ async def main():
                 state = await wait_for_bet_ready(handle)
                 last = await handle.query(BlackjackSessionWorkflow.get_last_hand_result)
                 if last:
+                    tracker.observe_result(last)
                     render_result(last)
                 continue
 
@@ -184,7 +199,10 @@ async def main():
                     break
 
                 if not snap.get("hand_over", False):
-                    render_snapshot(snap)
+                    tracker.observe_snapshot(snap)
+                    render_snapshot(
+                        snap, running_count=tracker.running_count, true_count=tracker.true_count
+                    )
 
                 if snap.get("hand_over", False):
                     break
@@ -206,6 +224,7 @@ async def main():
             state = await wait_for_bet_ready(handle)
             last = await handle.query(BlackjackSessionWorkflow.get_last_hand_result)
             if last:
+                tracker.observe_result(last)
                 render_result(last)
 
     except KeyboardInterrupt:
