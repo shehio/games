@@ -208,3 +208,68 @@ class TestSerialization:
         assert restored.net_payout == 150
         assert restored.result_description == "Blackjack! You win!"
         assert restored.final_snapshot.hand_over is True
+
+
+# ---------------------------------------------------------------------------
+# Insurance field serialization
+# ---------------------------------------------------------------------------
+
+
+class TestInsuranceSerialization:
+    def test_hand_state_with_insurance_bet(self):
+        hs = HandState(
+            cards=[Card(Rank.TEN, Suit.SPADES), Card(Rank.NINE, Suit.HEARTS)],
+            bet=100,
+            insurance_bet=50,
+        )
+        d = hand_state_to_dict(hs)
+        assert d["insurance_bet"] == 50
+        restored = hand_state_from_dict(d)
+        assert restored.insurance_bet == 50
+
+    def test_hand_state_backward_compat(self):
+        d = {
+            "cards": [{"rank": "10", "suit": "♠"}],
+            "bet": 100,
+            "is_done": False,
+            "is_doubled": False,
+            "result": None,
+            "payout": 0,
+        }
+        restored = hand_state_from_dict(d)
+        assert restored.insurance_bet == 0
+
+    def test_snapshot_with_insurance_fields(self):
+        snap = HandSnapshot(
+            player_hands=[HandState(cards=[], bet=100)],
+            dealer_cards=[Card(Rank.ACE, Suit.HEARTS)],
+            insurance_offered=True,
+            insurance_result="Insurance pays 2:1!",
+        )
+        d = snapshot_to_dict(snap)
+        assert d["insurance_offered"] is True
+        assert d["insurance_result"] == "Insurance pays 2:1!"
+        restored = snapshot_from_dict(d)
+        assert restored.insurance_offered is True
+        assert restored.insurance_result == "Insurance pays 2:1!"
+
+    def test_snapshot_backward_compat(self):
+        d = {
+            "player_hands": [
+                {
+                    "cards": [],
+                    "bet": 100,
+                    "is_done": False,
+                    "is_doubled": False,
+                    "result": None,
+                    "payout": 0,
+                }
+            ],
+            "dealer_cards": [],
+            "dealer_hidden": True,
+            "hand_over": False,
+            "message": "",
+        }
+        restored = snapshot_from_dict(d)
+        assert restored.insurance_offered is False
+        assert restored.insurance_result == ""
