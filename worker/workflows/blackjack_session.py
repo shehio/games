@@ -147,6 +147,7 @@ class BlackjackSessionWorkflow:
                 "shoe": [card_to_dict(c) for c in self.shoe],
                 "dealer_cards": [card_to_dict(c) for c in dealer_cards],
                 "player_cards": [card_to_dict(c) for c in player_cards],
+                "available_bankroll": self.bankroll,
             }
 
             result = await workflow.execute_child_workflow(
@@ -163,6 +164,8 @@ class BlackjackSessionWorkflow:
             self.last_hand_result = result
 
             # Process result
+            insurance_bet = result.get("insurance_bet", 0)
+            self.total_wagered += insurance_bet
             net_payout = result["net_payout"]
             self.bankroll += bet + net_payout  # return bet + net
             self.net_winnings += net_payout
