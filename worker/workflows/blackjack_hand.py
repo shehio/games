@@ -28,17 +28,25 @@ class BlackjackHandWorkflow:
         self.pending_action: PlayerActionInput | None = None
         self.hand_over: bool = False
         self.active_hand_index: int = 0
+        # Insurance state
+        self.insurance_offered: bool = False
+        self.insurance_resolved: bool = False
+        self.insurance_bet: int = 0
+        self.insurance_payout: int = 0
+        self.available_bankroll: int = 0
 
     def _draw(self) -> Card:
         return self.shoe.pop(0)
 
-    def _build_snapshot(self, message: str = "") -> HandSnapshot:
+    def _build_snapshot(self, message: str = "", insurance_result: str = "") -> HandSnapshot:
         return HandSnapshot(
             player_hands=self.player_hands,
             dealer_cards=self.dealer_cards,
             dealer_hidden=not self.hand_over,
             hand_over=self.hand_over,
             message=message,
+            insurance_offered=self.insurance_offered,
+            insurance_result=insurance_result,
         )
 
     def _available_actions(self) -> list[Action]:
@@ -134,6 +142,30 @@ class BlackjackHandWorkflow:
     @workflow.query
     def get_remaining_shoe_count(self) -> int:
         return len(self.shoe)
+
+    @workflow.query
+    def is_insurance_offered(self) -> bool:
+        return self.insurance_offered and not self.insurance_resolved
+
+    @workflow.update
+    async def insurance_action(self, inp: dict) -> dict:
+        """Handle insurance decision. inp: {take: bool, amount: int}."""
+        if not self.insurance_offered or self.insurance_resolved:
+            return snapshot_to_dict(self._build_snapshot("Insurance is not available."))
+
+        take = inp.get("take", False)
+        amount = inp.get("amount", 0)
+
+        if take:
+            max_insurance = min(self.bet // 2, self.available_bankroll)
+            if amount <= 0 or amount > max_insurance:
+                return snapshot_to_dict(
+                    self._build_snapshot(f"Insurance bet must be between $1 and ${max_insurance}.")
+                )
+            self.insurance_bet = amount
+
+        self.insurance_resolved = True
+        return snapshot_to_dict(self._build_snapshot())
 
     @workflow.run
     async def run(self, input_data: dict) -> dict:
