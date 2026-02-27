@@ -36,6 +36,8 @@ def prompt_action(available: list[str]) -> Action:
         "double": Action.DOUBLE,
         "p": Action.SPLIT,
         "split": Action.SPLIT,
+        "i": Action.INSURANCE,
+        "insurance": Action.INSURANCE,
     }
 
     shortcuts = []
@@ -48,6 +50,8 @@ def prompt_action(available: list[str]) -> Action:
             shortcuts.append("(d)ouble")
         elif a == "split":
             shortcuts.append("s(p)lit")
+        elif a == "insurance":
+            shortcuts.append("(i)nsurance")
 
     prompt_text = "  ".join(shortcuts)
 
@@ -56,6 +60,34 @@ def prompt_action(available: list[str]) -> Action:
         if response in action_map and action_map[response].value in available:
             return action_map[response]
         print(f"  Choose from: {', '.join(available)}")
+
+
+def prompt_insurance(bet: int, max_insurance: int, is_even_money: bool) -> tuple[bool, int]:
+    """Ask player about insurance/even money.
+
+    Returns (take, amount) where take is whether they want insurance
+    and amount is the insurance bet size.
+    """
+    if is_even_money:
+        response = input("  Even money? (y/n) [n]: ").strip().lower()
+        if response in ("y", "yes"):
+            return (True, bet // 2)
+        return (False, 0)
+
+    response = input("  Insurance? (y/n) [n]: ").strip().lower()
+    if response not in ("y", "yes"):
+        return (False, 0)
+
+    # Ask for amount
+    while True:
+        amount_str = input(f"  Insurance amount (max ${max_insurance}): ").strip()
+        try:
+            amount = int(amount_str)
+            if 1 <= amount <= max_insurance:
+                return (True, amount)
+            print(f"  Must be between $1 and ${max_insurance}")
+        except ValueError:
+            print("  Enter a number")
 
 
 def confirm_cash_out() -> bool:
