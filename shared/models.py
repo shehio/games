@@ -30,6 +30,7 @@ class Action(StrEnum):
     STAND = "stand"
     DOUBLE = "double"
     SPLIT = "split"
+    INSURANCE = "insurance"
 
 
 class HandResult(StrEnum):
