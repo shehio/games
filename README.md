@@ -153,12 +153,20 @@ If you take insurance and the dealer has Blackjack, insurance pays 2:1 — break
 +------------------------------------------------------------------+
 ```
 
+- **Parent workflow** (`BlackjackSessionWorkflow`) — Manages bankroll, shoe, and session stats. Spawns one child workflow per hand.
+- **Child workflow** (`BlackjackHandWorkflow`) — Handles a single hand: player actions via Temporal updates, insurance phase, then dealer AI.
+- **Activity** (`shuffle_deck`) — Shuffles a 6-deck (312 card) shoe.
+
+### Workflow Sequence
+
 ```
   Client                Session WF              Hand WF
     |                       |                       |
     |-- place_bet --------->|                       |
     |   (update)            |-- start child ------->|
     |                       |                       |
+    |-- insurance_action -->|---------------------->|  (if dealer shows Ace)
+    |   (update)            |                       |
     |-- player_action ----->|---------------------->|
     |   (update)            |                       |
     |<----------------------|-------- snapshot -----|
@@ -168,26 +176,31 @@ If you take insurance and the dealer has Blackjack, insurance pays 2:1 — break
     |<----------------------|- snapshot (hand_over) |
     |                       |<-- hand result -------|
     |                       |                       |
-    |-- query last result ->|                       |
-    |<-- result ------------|                       |
-    |                       |                       |
     |-- cash_out ---------->|                       |
     |   (signal)            |                       |
     |<-- session summary ---|                       |
     v                       v                       v
 ```
 
-- **Parent workflow** (`BlackjackSessionWorkflow`) - Manages bankroll, 6-deck shoe, and session stats. Spawns one child workflow per hand.
-- **Child workflow** (`BlackjackHandWorkflow`) - Handles a single hand: player actions (hit/stand/double/split) via Temporal update handlers, then runs dealer AI.
-- **Activity** (`shuffle_deck`) - Shuffles a 6-deck (312 card) shoe.
+## Live Card Counting
+
+The client tracks every card dealt using the **Hi-Lo** system and displays the running count (RC) and true count (TC) in real time.
+
+| Cards | Value |
+|-------|-------|
+| 2-6   | +1    |
+| 7-9   | 0     |
+| 10-A  | -1    |
+
+**True count** = running count / decks remaining. A positive TC means more high cards remain in the shoe — favorable for the player. Use the count to inform insurance decisions and bet sizing.
+
+The count resets automatically when the shoe is reshuffled.
 
 ## Simulations
 
 ### Shoe Penetration
 
-A Monte Carlo simulation sweeps reshuffle thresholds across the 6-deck shoe to
-find the optimal penetration depth. It plays 100,000 hands per threshold using
-basic strategy and reports house edge, hands per shoe, and blackjack rate.
+Sweeps reshuffle thresholds to find the optimal penetration depth (100k hands per threshold, basic strategy):
 
 ```bash
 uv run python -m simulations.shoe_penetration
@@ -195,28 +208,16 @@ uv run python -m simulations.shoe_penetration
 
 ### Card Counting & Betting Strategies
 
-Combines three card counting systems with four betting strategies and sweeps
-across penetration thresholds to measure their effect on house edge.
-
-**Counting systems:**
-- **Hi-Lo** — balanced, single-level (2-6 = +1, 7-9 = 0, 10-A = -1)
-- **Omega II** — balanced, multi-level (more precise but harder to use)
-- **KO (Knock-Out)** — unbalanced (no true count conversion needed)
-
-**Betting strategies:**
-- **Flat** — constant bet (baseline)
-- **Spread** — scales linearly with true count, capped at max spread
-- **Kelly** — bets proportional to estimated edge (~0.5% per true count point)
-- **Martingale** — doubles after loss (cautionary example)
+Combines three counting systems (Hi-Lo, Omega II, KO) with four betting strategies (Flat, Spread, Kelly, Martingale) across penetration thresholds:
 
 ```bash
 uv run python -m simulations.counting_simulation
 ```
 
-### Run Tests
+### Tests
 
 ```bash
-uv run pytest tests/ -v
+uv run pytest tests/ -v    # 124 tests
 ```
 
 ## Stack
