@@ -361,4 +361,4 @@ class TestBankruptcy:
                     await complete_hand(env.client, handle)
 
             summary = await handle.result()
-            assert summary["final_bankroll"] < MIN_BET or summary["hands_played"] > 0
+            assert summary["final_bankroll"] < MIN_BET
