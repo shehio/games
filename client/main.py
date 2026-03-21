@@ -130,6 +130,7 @@ async def main():
             hand_handle = client.get_workflow_handle(hand_wf_id)
 
             # Show initial deal
+            snap = None
             try:
                 snap = await hand_handle.query(BlackjackHandWorkflow.get_snapshot)
                 tracker.observe_snapshot(snap)
