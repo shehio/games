@@ -4,6 +4,7 @@ import asyncio
 
 import pytest
 import pytest_asyncio
+from temporalio.service import RPCError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
@@ -59,7 +60,7 @@ async def complete_hand(client, session_handle, timeout: float = 10.0):
                     {"take": False},
                 )
             break
-        except Exception:
+        except RPCError:
             await asyncio.sleep(0.05)
 
     # Send stand to complete the hand (if it hasn't already resolved)
@@ -74,7 +75,7 @@ async def complete_hand(client, session_handle, timeout: float = 10.0):
                     BlackjackHandWorkflow.player_action,
                     {"action": "stand", "hand_index": 0},
                 )
-        except Exception:
+        except RPCError:
             pass  # Hand may have already completed
         await asyncio.sleep(0.05)
 
