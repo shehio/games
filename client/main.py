@@ -4,7 +4,14 @@ import asyncio
 import os
 import uuid
 
-from temporalio.client import Client
+from temporalio.client import (
+    Client,
+    WorkflowContinuedAsNewError,
+    WorkflowFailureError,
+    WorkflowQueryFailedError,
+    WorkflowQueryRejectedError,
+)
+from temporalio.service import RPCError
 
 from client.card_tracker import CardTracker
 from client.ui.prompts import confirm_cash_out, prompt_action, prompt_bet, prompt_insurance
@@ -20,6 +27,8 @@ from client.ui.renderer import (
 from shared.constants import MIN_BET, STARTING_BANKROLL, TASK_QUEUE
 from worker.workflows.blackjack_hand import BlackjackHandWorkflow
 from worker.workflows.blackjack_session import BlackjackSessionWorkflow
+
+_QUERY_ERRORS = (RPCError, WorkflowQueryFailedError, WorkflowQueryRejectedError)
 
 
 async def wait_for_hand(handle, timeout: float = 10.0) -> str | None:
@@ -129,23 +138,38 @@ async def main():
 
             hand_handle = client.get_workflow_handle(hand_wf_id)
 
-            # Show initial deal
+            # Show initial deal — query and render are separated so a rendering
+            # error doesn't get swallowed by the RPC catch.
+            snap = None
             try:
                 snap = await hand_handle.query(BlackjackHandWorkflow.get_snapshot)
+            except _QUERY_ERRORS as e:
+                print(f"  (Could not load initial deal: {e})")
+
+            if snap is not None:
                 tracker.observe_snapshot(snap)
                 render_snapshot(
                     snap, running_count=tracker.running_count, true_count=tracker.true_count
                 )
-            except Exception as e:
-                print(f"  (Could not load initial deal: {e})")
 
-            # Handle insurance phase
+            # Handle insurance phase — query, prompt, and signal are separated
+            # so prompt errors don't get caught by the RPC handler.
             try:
                 insurance_offered = await hand_handle.query(
                     BlackjackHandWorkflow.is_insurance_offered
                 )
-                if insurance_offered:
+            except _QUERY_ERRORS as e:
+                print(f"  (Insurance query error: {e})")
+                insurance_offered = False
+
+            if insurance_offered:
+                try:
                     state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+                except _QUERY_ERRORS as e:
+                    print(f"  (Could not query session state for insurance: {e})")
+                    state = None
+
+                if state is not None:
                     max_insurance = min(bet // 2, state["bankroll"])
                     player_has_bj = (
                         snap
@@ -162,17 +186,19 @@ async def main():
                         is_even_money = is_blackjack(p_cards)
 
                     take, amount = prompt_insurance(bet, max_insurance, is_even_money)
-                    await hand_handle.execute_update(
-                        BlackjackHandWorkflow.insurance_action,
-                        {"take": take, "amount": amount},
-                    )
-            except Exception as e:
-                print(f"  (Insurance handling error: {e})")
+
+                    try:
+                        await hand_handle.execute_update(
+                            BlackjackHandWorkflow.insurance_action,
+                            {"take": take, "amount": amount},
+                        )
+                    except RPCError as e:
+                        print(f"  (Insurance action error: {e})")
 
             # Check if hand needs player input
             try:
                 available = await hand_handle.query(BlackjackHandWorkflow.get_available_actions)
-            except Exception as e:
+            except _QUERY_ERRORS as e:
                 print(f"  (Could not query actions: {e})")
                 available = []
 
@@ -194,7 +220,7 @@ async def main():
                         BlackjackHandWorkflow.player_action,
                         {"action": action.value, "hand_index": 0},
                     )
-                except Exception as e:
+                except RPCError as e:
                     render_error(f"Action failed: {e}")
                     break
 
@@ -209,7 +235,7 @@ async def main():
 
                 try:
                     available = await hand_handle.query(BlackjackHandWorkflow.get_available_actions)
-                except Exception as e:
+                except _QUERY_ERRORS as e:
                     print(f"  (Could not query actions: {e})")
                     break
 
@@ -231,19 +257,20 @@ async def main():
         print("\n  Interrupted! Cashing out...")
         try:
             await handle.signal(BlackjackSessionWorkflow.cash_out)
-        except Exception as e:
+        except RPCError as e:
             print(f"  (Could not signal cash out: {e})")
 
     # Final summary
+    # Continue-as-new is not used by design, but handled defensively.
     try:
         result = await handle.result()
         render_session_summary(result, player_name, session_id)
-    except Exception as e:
+    except (WorkflowFailureError, WorkflowContinuedAsNewError, RPCError) as e:
         print(f"\n  (Could not get session result: {e})")
         try:
             state = await handle.query(BlackjackSessionWorkflow.get_session_state)
             print(f"  Final bankroll: ${state['bankroll']}")
-        except Exception:
+        except _QUERY_ERRORS:
             print("  (Could not retrieve final state)")
 
 
