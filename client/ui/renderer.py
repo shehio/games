@@ -55,7 +55,6 @@ def render_hand_str(cards: list[Card], hidden: bool = False) -> str:
 
 def render_snapshot(
     snap_dict: dict,
-    bankroll: int = 0,
     running_count: int = 0,
     true_count: float = 0.0,
 ) -> None:
