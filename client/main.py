@@ -125,6 +125,9 @@ async def main():
                 render_error(bet_result["error"])
                 continue
 
+            # Positions repeat every hand - start fresh position tracking
+            tracker.start_hand()
+
             # Wait for child hand workflow to start (or finish instantly)
             hand_wf_id = await wait_for_hand(handle)
 

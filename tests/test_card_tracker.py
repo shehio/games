@@ -123,6 +123,61 @@ class TestCardTracker:
         assert tracker.running_count == 0
         assert len(tracker._seen) == 0
 
+    def test_next_hand_cards_are_counted(self):
+        """Cards in a new hand reuse the same positions and must still count."""
+        tracker = CardTracker()
+        # Hand 1: dealer K(visible)+5, player 10+9
+        snap = make_snap(
+            dealer_cards=[Card(Rank.KING, Suit.HEARTS), Card(Rank.FIVE, Suit.SPADES)],
+            player_hands=[[Card(Rank.TEN, Suit.CLUBS), Card(Rank.NINE, Suit.DIAMONDS)]],
+            dealer_hidden=True,
+        )
+        tracker.observe_snapshot(snap)
+        result = make_result(
+            dealer_cards=[Card(Rank.KING, Suit.HEARTS), Card(Rank.FIVE, Suit.SPADES)],
+            player_hands=[[Card(Rank.TEN, Suit.CLUBS), Card(Rank.NINE, Suit.DIAMONDS)]],
+        )
+        tracker.observe_result(result)
+        # K(-1) + 5(+1) + 10(-1) + 9(0) = -1
+        assert tracker.running_count == -1
+
+        # Hand 2: same positions, different cards
+        tracker.start_hand()
+        snap2 = make_snap(
+            dealer_cards=[Card(Rank.FIVE, Suit.DIAMONDS), Card(Rank.NINE, Suit.CLUBS)],
+            player_hands=[[Card(Rank.FOUR, Suit.CLUBS), Card(Rank.THREE, Suit.DIAMONDS)]],
+            dealer_hidden=True,
+        )
+        tracker.observe_snapshot(snap2)
+        # 5(+1) + 4(+1) + 3(+1) = +3 on top of -1 → +2
+        assert tracker.running_count == 2
+
+    def test_split_counts_each_card_exactly_once(self):
+        """A split moves a card to a new hand and draws replacements."""
+        tracker = CardTracker()
+        # Initial: dealer 10(visible)+6, player 6+6
+        # Hi-Lo: 10(-1) + 6(+1) + 6(+1) = +1
+        snap1 = make_snap(
+            dealer_cards=[Card(Rank.TEN, Suit.HEARTS), Card(Rank.SIX, Suit.SPADES)],
+            player_hands=[[Card(Rank.SIX, Suit.CLUBS), Card(Rank.SIX, Suit.HEARTS)]],
+            dealer_hidden=True,
+        )
+        tracker.observe_snapshot(snap1)
+        assert tracker.running_count == 1
+
+        # After split: hand 1 = 6♣+K, hand 2 = 6♥(moved)+Q
+        # Only K(-1) and Q(-1) are new → RC = +1 - 2 = -1
+        snap2 = make_snap(
+            dealer_cards=[Card(Rank.TEN, Suit.HEARTS), Card(Rank.SIX, Suit.SPADES)],
+            player_hands=[
+                [Card(Rank.SIX, Suit.CLUBS), Card(Rank.KING, Suit.CLUBS)],
+                [Card(Rank.SIX, Suit.HEARTS), Card(Rank.QUEEN, Suit.DIAMONDS)],
+            ],
+            dealer_hidden=True,
+        )
+        tracker.observe_snapshot(snap2)
+        assert tracker.running_count == -1
+
     def test_true_count_calculation(self):
         """True count = running count / decks remaining."""
         tracker = CardTracker(num_decks=6)
