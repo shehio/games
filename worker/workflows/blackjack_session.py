@@ -166,6 +166,9 @@ class BlackjackSessionWorkflow:
             # Process result
             insurance_bet = result.get("insurance_bet", 0)
             self.total_wagered += insurance_bet
+            # Doubles and splits put extra money on the table beyond the original bet
+            final_hands = result["final_snapshot"]["player_hands"]
+            self.total_wagered += sum(h["bet"] for h in final_hands) - bet
             net_payout = result["net_payout"]
             self.bankroll += bet + net_payout  # return bet + net
             self.net_winnings += net_payout
@@ -177,7 +180,7 @@ class BlackjackSessionWorkflow:
                 self.bankroll_high = self.bankroll
 
             desc = result["result_description"]
-            if "Blackjack" in desc and "win" in desc.lower():
+            if ("Blackjack" in desc and "win" in desc.lower()) or "Even Money" in desc:
                 self.blackjacks += 1
                 self.hands_won += 1
             elif "Win" in desc or "win" in desc:

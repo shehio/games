@@ -215,12 +215,20 @@ async def main():
 
             # Player action loop
             while available:
+                # Actions must target the active hand (matters after a split)
+                try:
+                    hand_index = await hand_handle.query(
+                        BlackjackHandWorkflow.get_active_hand_index
+                    )
+                except _QUERY_ERRORS:
+                    hand_index = 0
+
                 action = prompt_action(available)
 
                 try:
                     snap = await hand_handle.execute_update(
                         BlackjackHandWorkflow.player_action,
-                        {"action": action.value, "hand_index": 0},
+                        {"action": action.value, "hand_index": hand_index},
                     )
                 except RPCError as e:
                     render_error(f"Action failed: {e}")

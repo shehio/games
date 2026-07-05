@@ -217,7 +217,7 @@ uv run python -m simulations.counting_simulation
 ### Tests
 
 ```bash
-uv run pytest tests/ -v    # 124 tests
+uv run pytest tests/ -v    # 130 tests
 ```
 
 ## Stack

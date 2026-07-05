@@ -335,6 +335,65 @@ class TestSplit:
         # Dealer: 10+6+5=21, both player hands lose (18 vs 21)
         assert result["net_payout"] == -200  # lost both 100 bets
 
+    @pytest.mark.asyncio
+    async def test_active_hand_index_advances_after_split(self, env: WorkflowEnvironment):
+        """After finishing the first split hand, the active index moves to hand 2."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.EIGHT), c(Rank.EIGHT, Suit.HEARTS)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.SIX)],
+            shoe=[c(Rank.KING), c(Rank.QUEEN), c(Rank.FIVE, Suit.HEARTS)],
+        )
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="split-active-index",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "split", "hand_index": 0},
+            )
+            assert await handle.query(BlackjackHandWorkflow.get_active_hand_index) == 0
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            # Second split hand is now the active one
+            assert await handle.query(BlackjackHandWorkflow.get_active_hand_index) == 1
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 1},
+            )
+            await handle.result()
+
+    @pytest.mark.asyncio
+    async def test_double_and_split_require_funds(self, env: WorkflowEnvironment):
+        """Double/split need another bet's worth of bankroll to be offered."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.EIGHT), c(Rank.EIGHT, Suit.HEARTS)],
+            dealer=[c(Rank.TEN, Suit.HEARTS), c(Rank.SEVEN)],
+        )
+        inp["available_bankroll"] = 50  # not enough for another 100
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="no-funds-double-split",
+                task_queue=TASK_QUEUE,
+            )
+            actions = await handle.query(BlackjackHandWorkflow.get_available_actions)
+            assert "double" not in actions
+            assert "split" not in actions
+            assert "hit" in actions
+            await handle.execute_update(
+                BlackjackHandWorkflow.player_action,
+                {"action": "stand", "hand_index": 0},
+            )
+            await handle.result()
+
 
 class TestDealerStandsOn17:
     @pytest.mark.asyncio
@@ -527,6 +586,30 @@ class TestInsurance:
             result = await handle.result()
         # Even money: net = bet = 100 (hand pays 2x bet = 200, - bet = +100,
         # insurance refunded so insurance_net = 0)
+        assert result["net_payout"] == 100
+        assert "Even Money" in result["result_description"]
+
+    @pytest.mark.asyncio
+    async def test_even_money_with_no_bankroll_left(self, env: WorkflowEnvironment):
+        """Even money is a flat guarantee and must work even with $0 bankroll left."""
+        inp = make_input(
+            bet=100,
+            player=[c(Rank.ACE), c(Rank.KING)],
+            dealer=[c(Rank.ACE), c(Rank.TEN)],
+        )
+        inp["available_bankroll"] = 0
+        async with Worker(env.client, task_queue=TASK_QUEUE, workflows=[BlackjackHandWorkflow]):
+            handle = await env.client.start_workflow(
+                BlackjackHandWorkflow.run,
+                inp,
+                id="even-money-broke",
+                task_queue=TASK_QUEUE,
+            )
+            await handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": True, "amount": 0},
+            )
+            result = await handle.result()
         assert result["net_payout"] == 100
         assert "Even Money" in result["result_description"]
 
