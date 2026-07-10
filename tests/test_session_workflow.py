@@ -4,11 +4,13 @@ import asyncio
 
 import pytest
 import pytest_asyncio
+from temporalio import activity
 from temporalio.service import RPCError
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Worker
 
 from shared.constants import MIN_BET, STARTING_BANKROLL, TASK_QUEUE
+from shared.models import Card, Rank, Suit, card_to_dict
 from worker.activities.deck import shuffle_deck
 from worker.workflows.blackjack_hand import BlackjackHandWorkflow
 from worker.workflows.blackjack_session import BlackjackSessionWorkflow
@@ -358,3 +360,83 @@ class TestBankruptcy:
 
             summary = await handle.result()
             assert summary["final_bankroll"] < MIN_BET
+
+
+# ---------------------------------------------------------------------------
+# Even money stats
+# ---------------------------------------------------------------------------
+
+
+@activity.defn(name="shuffle_deck")
+async def stacked_even_money_deck() -> list[dict]:
+    """Stacked shoe: player gets A+K (blackjack), dealer gets A+9 (shows ace, no BJ)."""
+    stacked = [
+        card_to_dict(Card(Rank.ACE, Suit.SPADES)),
+        card_to_dict(Card(Rank.KING, Suit.SPADES)),
+        card_to_dict(Card(Rank.ACE, Suit.HEARTS)),
+        card_to_dict(Card(Rank.NINE, Suit.SPADES)),
+    ]
+    filler = [card_to_dict(Card(Rank.TWO, suit)) for suit in Suit] * 30
+    return stacked + filler
+
+
+class TestEvenMoneyStats:
+    @pytest.mark.asyncio
+    async def test_even_money_counted_as_win(self, env: WorkflowEnvironment):
+        """An even money hand nets +bet and must be recorded as a win, not a loss."""
+        async with Worker(
+            env.client,
+            task_queue=TASK_QUEUE,
+            workflows=[BlackjackSessionWorkflow, BlackjackHandWorkflow],
+            activities=[stacked_even_money_deck],
+        ):
+            handle = await env.client.start_workflow(
+                BlackjackSessionWorkflow.run,
+                id="even-money-win",
+                task_queue=TASK_QUEUE,
+            )
+            r = await handle.execute_update(
+                BlackjackSessionWorkflow.place_bet,
+                {"amount": 100},
+            )
+            assert r["ok"] is True
+
+            # Wait for the child hand workflow, then take even money
+            hand_wf_id = None
+            for _ in range(100):
+                state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+                wf_id = state.get("active_hand_workflow_id")
+                if wf_id and wf_id != "pending":
+                    hand_wf_id = wf_id
+                    break
+                await asyncio.sleep(0.05)
+            assert hand_wf_id is not None
+
+            hand_handle = env.client.get_workflow_handle(hand_wf_id)
+            for _ in range(100):
+                try:
+                    if await hand_handle.query(BlackjackHandWorkflow.is_insurance_offered):
+                        break
+                except RPCError:
+                    pass
+                await asyncio.sleep(0.05)
+            await hand_handle.execute_update(
+                BlackjackHandWorkflow.insurance_action,
+                {"take": True, "amount": 50},
+            )
+
+            # Wait for the session to process the result
+            for _ in range(100):
+                state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+                if state["waiting_for_bet"]:
+                    break
+                await asyncio.sleep(0.05)
+
+            state = await handle.query(BlackjackSessionWorkflow.get_session_state)
+            assert state["hands_won"] == 1
+            assert state["hands_lost"] == 0
+            assert state["blackjacks"] == 1
+            assert state["bankroll"] == STARTING_BANKROLL + 100
+
+            await handle.signal(BlackjackSessionWorkflow.cash_out)
+            await handle.result()

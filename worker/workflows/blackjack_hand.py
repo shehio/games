@@ -34,7 +34,7 @@ class BlackjackHandWorkflow:
         self.insurance_resolved: bool = False
         self.insurance_bet: int = 0
         self.insurance_payout: int = 0
-        self.available_bankroll: int = 0
+        self.available_bankroll: int | None = None
 
     def _draw(self) -> Card:
         return self.shoe.pop(0)
@@ -50,17 +50,25 @@ class BlackjackHandWorkflow:
             insurance_result=insurance_result,
         )
 
+    def _can_afford(self, extra: int) -> bool:
+        """Whether the player has enough bankroll to put `extra` more on the table."""
+        if self.available_bankroll is None:
+            return True
+        committed = sum(h.bet for h in self.player_hands) - self.bet + self.insurance_bet
+        return self.available_bankroll - committed >= extra
+
     def _available_actions(self) -> list[Action]:
         hand = self.player_hands[self.active_hand_index]
         if hand.is_done:
             return []
         actions = [Action.HIT, Action.STAND]
-        if len(hand.cards) == 2 and not hand.is_doubled:
+        if len(hand.cards) == 2 and not hand.is_doubled and self._can_afford(hand.bet):
             actions.append(Action.DOUBLE)
         if (
             len(hand.cards) == 2
             and len(self.player_hands) == 1
             and hand.cards[0].rank == hand.cards[1].rank
+            and self._can_afford(self.bet)
         ):
             actions.append(Action.SPLIT)
         return actions
@@ -145,6 +153,10 @@ class BlackjackHandWorkflow:
         return len(self.shoe)
 
     @workflow.query
+    def get_active_hand_index(self) -> int:
+        return self.active_hand_index
+
+    @workflow.query
     def is_insurance_offered(self) -> bool:
         return self.insurance_offered and not self.insurance_resolved
 
@@ -158,12 +170,21 @@ class BlackjackHandWorkflow:
         amount = inp.get("amount", 0)
 
         if take:
-            max_insurance = min(self.bet // 2, self.available_bankroll)
-            if amount <= 0 or amount > max_insurance:
-                return snapshot_to_dict(
-                    self._build_snapshot(f"Insurance bet must be between $1 and ${max_insurance}.")
-                )
-            self.insurance_bet = amount
+            if is_blackjack(self.player_hands[0].cards):
+                # Even money: the side bet is refunded (flat 1:1 guarantee),
+                # so no funds are actually risked - skip the funds check.
+                self.insurance_bet = max(1, self.bet // 2)
+            else:
+                max_insurance = self.bet // 2
+                if self.available_bankroll is not None:
+                    max_insurance = min(max_insurance, self.available_bankroll)
+                if amount <= 0 or amount > max_insurance:
+                    return snapshot_to_dict(
+                        self._build_snapshot(
+                            f"Insurance bet must be between $1 and ${max_insurance}."
+                        )
+                    )
+                self.insurance_bet = amount
 
         self.insurance_resolved = True
         return snapshot_to_dict(self._build_snapshot())
@@ -199,7 +220,7 @@ class BlackjackHandWorkflow:
         self.shoe = [card_from_dict(c) for c in input_data["shoe"]]
         self.dealer_cards = [card_from_dict(c) for c in input_data["dealer_cards"]]
         player_cards = [card_from_dict(c) for c in input_data["player_cards"]]
-        self.available_bankroll = input_data.get("available_bankroll", 0)
+        self.available_bankroll = input_data.get("available_bankroll")
 
         self.player_hands = [HandState(cards=player_cards, bet=self.bet)]
 

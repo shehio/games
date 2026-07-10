@@ -71,7 +71,7 @@ def prompt_insurance(bet: int, max_insurance: int, is_even_money: bool) -> tuple
     if is_even_money:
         response = input("  Even money? (y/n) [n]: ").strip().lower()
         if response in ("y", "yes"):
-            return (True, bet // 2)
+            return (True, max(1, min(bet // 2, max_insurance)))
         return (False, 0)
 
     response = input("  Insurance? (y/n) [n]: ").strip().lower()
